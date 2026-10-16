@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,11 +15,13 @@ import (
 	"github.com/RaniXst/clothing-store/internal/config"
 	"github.com/RaniXst/clothing-store/internal/database"
 	"github.com/RaniXst/clothing-store/internal/middleware"
+	"github.com/RaniXst/clothing-store/migrations"
 )
 
 func main() {
+	startupLogger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	if err := run(); err != nil {
-		log.Printf("application failed: %v", err)
+		startupLogger.Error("application failed", "error", err)
 		os.Exit(1)
 	}
 }
@@ -48,6 +49,11 @@ func run() error {
 		return err
 	}
 	defer db.Close()
+
+	if err := migrations.Apply(ctx, db); err != nil {
+		return err
+	}
+	logger.Info("database migrations applied")
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logging(logger))
