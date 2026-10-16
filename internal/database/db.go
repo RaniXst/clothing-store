@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +24,7 @@ func Open(ctx context.Context, dbPath string) (*sql.DB, error) {
 		}
 	}
 
-	db, err := sql.Open("sqlite", dbPath)
+	db, err := sql.Open("sqlite", withForeignKeys(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
@@ -32,28 +33,31 @@ func Open(ctx context.Context, dbPath string) (*sql.DB, error) {
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)
 
-	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys = ON"); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("enable foreign keys: %w", err)
-	}
-
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	if err := db.PingContext(pingCtx); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
 	var foreignKeys int
 	if err := db.QueryRowContext(ctx, "PRAGMA foreign_keys").Scan(&foreignKeys); err != nil {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("check foreign keys: %w", err)
 	}
 	if foreignKeys != 1 {
-		db.Close()
+		_ = db.Close()
 		return nil, fmt.Errorf("SQLite foreign keys are not enabled")
 	}
 
 	return db, nil
+}
+
+func withForeignKeys(dbPath string) string {
+	separator := "?"
+	if strings.Contains(dbPath, "?") {
+		separator = "&"
+	}
+	return dbPath + separator + url.QueryEscape("_pragma") + "=" + url.QueryEscape("foreign_keys(1)")
 }
