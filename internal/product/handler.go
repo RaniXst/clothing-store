@@ -27,9 +27,17 @@ type Handler struct{ service Application }
 func NewHandler(service Application) *Handler { return &Handler{service: service} }
 
 func (h *Handler) RegisterRoutes(router chi.Router) {
-	router.Post("/product", h.create)
+	h.RegisterReadRoutes(router)
+	h.RegisterWriteRoutes(router)
+}
+
+func (h *Handler) RegisterReadRoutes(router chi.Router) {
 	router.Get("/product", h.list)
 	router.Get("/product/{id}", h.get)
+}
+
+func (h *Handler) RegisterWriteRoutes(router chi.Router) {
+	router.Post("/product", h.create)
 	router.Put("/product/{id}", h.update)
 	router.Delete("/product/{id}", h.delete)
 }

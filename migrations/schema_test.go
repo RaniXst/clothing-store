@@ -41,13 +41,13 @@ func TestSchemaAndSeedRoles(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate tables: %v", err)
 	}
-	for _, name := range []string{"products", "photos", "roles", "users", "cart", "orders", "order_items", ledgerTable} {
+	for _, name := range []string{"products", "photos", "roles", "users", "cart", "orders", "order_items", "auth_sessions", ledgerTable} {
 		if !tables[name] {
 			t.Errorf("table %q is missing", name)
 		}
 	}
-	if len(tables) != 8 {
-		t.Errorf("found %d application and migration tables, want 8", len(tables))
+	if len(tables) != 9 {
+		t.Errorf("found %d application and migration tables, want 9", len(tables))
 	}
 
 	roleRows, err := db.Query("SELECT name FROM roles ORDER BY name")

@@ -21,12 +21,13 @@ def run():
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript((MIGRATIONS / "001_init.sql").read_text(encoding="utf-8"))
         conn.executescript((MIGRATIONS / "002_seed_roles.sql").read_text(encoding="utf-8"))
+        conn.executescript((MIGRATIONS / "003_auth_sessions.sql").read_text(encoding="utf-8"))
         assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
 
         tables = {row[0] for row in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
         )}
-        expected = {"products", "photos", "roles", "users", "cart", "orders", "order_items"}
+        expected = {"products", "photos", "roles", "users", "cart", "orders", "order_items", "auth_sessions"}
         assert tables == expected, (tables, expected)
 
         roles = {row[0] for row in conn.execute("SELECT name FROM roles")}
@@ -38,6 +39,8 @@ def run():
         conn.execute("""INSERT INTO users
             (id,name,email,phone,role_id,registration_date,password_hash)
             VALUES ('u1','Test User','test@example.com','+100000000','11111111-1111-4111-8111-111111111111','2026-10-16T10:00:00Z','hash')""")
+        conn.execute("INSERT INTO auth_sessions (token_hash,csrf_hash,user_id,created_at,expires_at) VALUES (?,?,'u1','2026-10-16T10:00:00Z','2026-10-16T22:00:00Z')", ('a' * 64, 'b' * 64))
+        must_fail(conn, "INSERT INTO auth_sessions (token_hash,csrf_hash,user_id,created_at,expires_at) VALUES ('short','short','missing','now','later')")
         conn.execute("INSERT INTO photos (id,filename,product_id) VALUES ('ph1','p1.jpg','p1')")
         conn.execute("INSERT INTO cart (id,user_id,product_id,count) VALUES ('c1','u1','p1',2)")
         must_fail(conn, "INSERT INTO cart (id,user_id,product_id,count) VALUES ('c2','u1','p1',1)")
@@ -61,6 +64,7 @@ def run():
         # Deleting user cascades to cart.
         conn.execute("DELETE FROM users WHERE id='u1'")
         assert conn.execute("SELECT COUNT(*) FROM cart WHERE id='c1'").fetchone()[0] == 0
+        assert conn.execute("SELECT COUNT(*) FROM auth_sessions WHERE user_id='u1'").fetchone()[0] == 0
 
         # Deleting product cascades to photo metadata and cart entries; now no order references it.
         conn.execute("DELETE FROM products WHERE id='p1'")
@@ -68,7 +72,7 @@ def run():
         assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
 
         conn.close()
-    print("PASS: migrations, 7 tables, seed roles, constraints, FK delete rules, foreign_key_check")
+    print("PASS: migrations, 8 application tables, seed roles, constraints, FK delete rules, foreign_key_check")
 
 if __name__ == "__main__":
     run()

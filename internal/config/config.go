@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	AppPort   string
-	DBPath    string
-	UploadDir string
-	LogLevel  string
+	AppPort          string
+	DBPath           string
+	UploadDir        string
+	AuthCookieSecure bool
+	LogLevel         string
 }
 
 func Load() (Config, error) {
@@ -21,11 +22,17 @@ func Load() (Config, error) {
 		return Config{}, fmt.Errorf("load .env: %w", err)
 	}
 	cfg := Config{
-		AppPort:   getEnv("APP_PORT", "8080"),
-		DBPath:    getEnv("DB_PATH", "./data/clothing-store.db"),
-		UploadDir: strings.TrimSpace(getEnv("UPLOAD_DIR", "./uploads")),
-		LogLevel:  strings.ToLower(getEnv("LOG_LEVEL", "info")),
+		AppPort:          getEnv("APP_PORT", "8080"),
+		DBPath:           getEnv("DB_PATH", "./data/clothing-store.db"),
+		UploadDir:        strings.TrimSpace(getEnv("UPLOAD_DIR", "./uploads")),
+		AuthCookieSecure: false,
+		LogLevel:         strings.ToLower(getEnv("LOG_LEVEL", "info")),
 	}
+	secureCookie, err := strconv.ParseBool(getEnv("AUTH_COOKIE_SECURE", "false"))
+	if err != nil {
+		return Config{}, fmt.Errorf("AUTH_COOKIE_SECURE must be true or false")
+	}
+	cfg.AuthCookieSecure = secureCookie
 	port, err := strconv.Atoi(cfg.AppPort)
 	if err != nil || port < 1 || port > 65535 {
 		return Config{}, fmt.Errorf("APP_PORT must be a number from 1 to 65535")
