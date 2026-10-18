@@ -16,9 +16,11 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/RaniXst/clothing-store/internal/auth"
+	"github.com/RaniXst/clothing-store/internal/cart"
 	"github.com/RaniXst/clothing-store/internal/config"
 	"github.com/RaniXst/clothing-store/internal/database"
 	"github.com/RaniXst/clothing-store/internal/middleware"
+	orderapi "github.com/RaniXst/clothing-store/internal/order"
 	"github.com/RaniXst/clothing-store/internal/photo"
 	"github.com/RaniXst/clothing-store/internal/product"
 	"github.com/RaniXst/clothing-store/internal/storage"
@@ -119,6 +121,8 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 	photoHandler := photo.NewHandler(photoService)
 	userHandler := user.NewHandler(userService)
 	authHandler := auth.NewHandler(authService, auth.NewLoginLimiter(10, 15*time.Minute), secureCookie)
+	cartHandler := cart.NewHandler(cart.NewService(cart.NewSQLRepository(db)))
+	orderHandler := orderapi.NewHandler(orderapi.NewService(orderapi.NewSQLRepository(db)))
 	productHandler.RegisterReadRoutes(router)
 	photoHandler.RegisterReadRoutes(router)
 	userHandler.RegisterPublicRoutes(router)
@@ -126,6 +130,8 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 	router.Group(func(protected chi.Router) {
 		protected.Use(authService.RequireSession)
 		authHandler.RegisterProtectedRoutes(protected)
+		cartHandler.RegisterRoutes(protected)
+		orderHandler.RegisterRoutes(protected)
 		protected.Group(func(admin chi.Router) {
 			admin.Use(auth.RequireRoles("admin"))
 			admin.Use(auth.CSRF)

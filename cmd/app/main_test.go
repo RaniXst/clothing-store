@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"io"
 	"log/slog"
 	"net/http"
@@ -140,5 +141,161 @@ func TestStageThreeRouteAuthorization(t *testing.T) {
 	router.ServeHTTP(photoWrite, photoRequest)
 	if photoWrite.Code != http.StatusUnauthorized {
 		t.Fatalf("guest photo upload = %d, want 401", photoWrite.Code)
+	}
+}
+
+func TestStageFiveRouteAuthorizationAndCartOrderFlow(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.Open(ctx, filepath.Join(t.TempDir(), "stage5-routes.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if err := migrations.Apply(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	logger := testLogger()
+	router, err := buildRouter(ctx, logger, db, filepath.Join(t.TempDir(), "uploads"), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	userRepo := user.NewSQLRepository(db)
+	userService := user.NewService(userRepo, auth.PasswordHasher{})
+	if _, err := userService.BootstrapAdmin(ctx, "Admin", "stage5-admin@example.test", "+10000000000", "stage5 admin password"); err != nil {
+		t.Fatal(err)
+	}
+	authService, err := auth.NewService(userRepo, auth.NewSQLSessionRepository(db))
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := authService.Register(ctx, auth.Registration{Name: "Client", Email: "stage5-client@example.test", Phone: "+10000000001", Password: "stage5 client password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := authService.Register(ctx, auth.Registration{Name: "Other", Email: "stage5-other@example.test", Phone: "+10000000002", Password: "stage5 other password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := userService.Create(ctx, user.CreateInput{Name: "Manager", Email: "stage5-manager@example.test", Phone: "+10000000003", RoleID: user.ManagerRoleID, Password: "stage5 manager password"}); err != nil {
+		t.Fatal(err)
+	}
+	manager, err := authService.Login(ctx, auth.Credentials{Email: "stage5-manager@example.test", Password: "stage5 manager password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := authService.Login(ctx, auth.Credentials{Email: "stage5-admin@example.test", Password: "stage5 admin password"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	productID := "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+	if _, err := db.ExecContext(ctx, `INSERT INTO products(id,name,type,gender,size,color,description,brand,season,price) VALUES(?,?,?,?,?,?,?,?,?,?)`, productID, "Shirt", "top", "unisex", "M", "blue", "", "Brand", "summer", 12500); err != nil {
+		t.Fatal(err)
+	}
+	request := func(method, path string, session auth.IssuedSession, body string, csrf bool) *httptest.ResponseRecorder {
+		t.Helper()
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if session.Token != "" {
+			req.AddCookie(&http.Cookie{Name: "clothing_session", Value: session.Token})
+			req.AddCookie(&http.Cookie{Name: "clothing_csrf", Value: session.CSRFToken})
+		}
+		if csrf {
+			req.Header.Set("X-CSRF-Token", session.CSRFToken)
+		}
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		return rec
+	}
+	if got := request(http.MethodGet, "/cart/"+client.User.ID, auth.IssuedSession{}, "", false).Code; got != http.StatusUnauthorized {
+		t.Fatalf("guest cart GET=%d", got)
+	}
+	noCSRF := request(http.MethodPost, "/cart", client, `{"product_id":"`+productID+`","count":2}`, false)
+	if noCSRF.Code != http.StatusForbidden {
+		t.Fatalf("cart POST without CSRF=%d", noCSRF.Code)
+	}
+	added := request(http.MethodPost, "/cart", client, `{"product_id":"`+productID+`","count":2}`, true)
+	if added.Code != http.StatusCreated {
+		t.Fatalf("cart POST=%d: %s", added.Code, added.Body.String())
+	}
+	var cartItem struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(added.Body.Bytes(), &cartItem); err != nil {
+		t.Fatal(err)
+	}
+	if got := request(http.MethodGet, "/cart/"+client.User.ID, client, "", false).Code; got != http.StatusOK {
+		t.Fatalf("owner cart GET=%d", got)
+	}
+	if got := request(http.MethodPut, "/cart/"+cartItem.ID, client, `{"count":0}`, true).Code; got != http.StatusBadRequest {
+		t.Fatalf("cart zero count PUT=%d", got)
+	}
+	if got := request(http.MethodPut, "/cart/"+cartItem.ID, client, `{"count":3}`, true).Code; got != http.StatusOK {
+		t.Fatalf("owner cart PUT=%d", got)
+	}
+	if got := request(http.MethodGet, "/cart/"+client.User.ID, other, "", false).Code; got != http.StatusNotFound {
+		t.Fatalf("foreign cart GET=%d", got)
+	}
+	if got := request(http.MethodDelete, "/cart/"+cartItem.ID, client, "", true).Code; got != http.StatusNoContent {
+		t.Fatalf("owner cart DELETE=%d", got)
+	}
+	if got := request(http.MethodPost, "/cart", client, `{"product_id":"`+productID+`","count":2}`, true).Code; got != http.StatusCreated {
+		t.Fatalf("cart re-add=%d", got)
+	}
+	created := request(http.MethodPost, "/order", client, "", true)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("order POST=%d: %s", created.Code, created.Body.String())
+	}
+	var result struct {
+		ID    string `json:"id"`
+		Items []struct {
+			Price int64 `json:"price"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(created.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Items) != 1 || result.Items[0].Price != 12500 {
+		t.Fatalf("checkout response=%+v", result)
+	}
+	if got := request(http.MethodPost, "/order", client, "", true).Code; got != http.StatusConflict {
+		t.Fatalf("repeat checkout=%d", got)
+	}
+	clientList := request(http.MethodGet, "/order", client, "", false)
+	managerList := request(http.MethodGet, "/order", manager, "", false)
+	if clientList.Code != 200 || managerList.Code != 200 {
+		t.Fatalf("client list=%d manager list=%d", clientList.Code, managerList.Code)
+	}
+	if got := request(http.MethodGet, "/order?limit=101", client, "", false).Code; got != http.StatusBadRequest {
+		t.Fatalf("invalid order pagination=%d", got)
+	}
+	if got := request(http.MethodGet, "/order/"+result.ID, other, "", false).Code; got != http.StatusNotFound {
+		t.Fatalf("foreign order GET=%d", got)
+	}
+	if got := request(http.MethodGet, "/order_item/"+result.ID, other, "", false).Code; got != http.StatusNotFound {
+		t.Fatalf("foreign order items GET=%d", got)
+	}
+	staffLine := request(http.MethodPost, "/order_item", admin, `{"order_id":"`+result.ID+`","product_id":"`+productID+`","count":1}`, true)
+	if staffLine.Code != http.StatusCreated {
+		t.Fatalf("admin add order item=%d: %s", staffLine.Code, staffLine.Body.String())
+	}
+	if got := request(http.MethodGet, "/order_item/"+result.ID, client, "", false).Code; got != http.StatusOK {
+		t.Fatalf("owner order items GET=%d", got)
+	}
+	cancel := request(http.MethodPut, "/order/"+result.ID, client, `{"status":"Отменён"}`, true)
+	if cancel.Code != 200 {
+		t.Fatalf("client cancel=%d: %s", cancel.Code, cancel.Body.String())
+	}
+	if got := request(http.MethodPut, "/order/"+result.ID, manager, `{"status":"В работе"}`, true).Code; got != http.StatusConflict {
+		t.Fatalf("invalid manager transition=%d", got)
+	}
+	addedLine := request(http.MethodPost, "/order_item", client, `{"order_id":"`+result.ID+`","product_id":"`+productID+`","count":1}`, true)
+	if addedLine.Code != http.StatusForbidden {
+		t.Fatalf("client add order item=%d", addedLine.Code)
+	}
+	staffLine = request(http.MethodPost, "/order_item", admin, `{"order_id":"`+result.ID+`","product_id":"`+productID+`","count":1}`, true)
+	if staffLine.Code != http.StatusConflict {
+		t.Fatalf("staff add item to cancelled order=%d", staffLine.Code)
 	}
 }
