@@ -35,8 +35,8 @@ func TestApplyIsRepeatableAndRecordsMigrations(t *testing.T) {
 	if err := db.QueryRow("SELECT count(*) FROM schema_migrations").Scan(&count); err != nil {
 		t.Fatalf("count migration records: %v", err)
 	}
-	if count != 2 {
-		t.Fatalf("migration records = %d, want 2", count)
+	if count != 3 {
+		t.Fatalf("migration records = %d, want 3", count)
 	}
 }
 
