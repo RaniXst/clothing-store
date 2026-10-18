@@ -47,7 +47,7 @@ type Order struct {
 	DateTime string `json:"datetime"`
 	Status   string `json:"status"`
 	Items    []Item `json:"items,omitempty"`
-	Total    int64  `json:"total,omitempty"`
+	Total    int64  `json:"total"`
 }
 type Page struct {
 	Items  []Order `json:"items"`
