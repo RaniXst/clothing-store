@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// newUserTestApp подготавливает HTTP-обработчик, тестовую базу и авторизованного администратора.
 func newUserTestApp(t *testing.T) (*chi.Mux, *sql.DB, *http.Cookie, *http.Cookie, *user.Service) {
 	t.Helper()
 	db, err := database.Open(context.Background(), t.TempDir()+"/users.db")
@@ -74,6 +75,7 @@ func newUserTestApp(t *testing.T) (*chi.Mux, *sql.DB, *http.Cookie, *http.Cookie
 	return router, db, session, csrf, service
 }
 
+// userRequest отправляет запрос к пользовательским маршрутам с сессионной и CSRF-cookie.
 func userRequest(router http.Handler, method, path string, body []byte, session, csrf *http.Cookie) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, bytes.NewReader(body))
 	if body != nil {

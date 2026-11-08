@@ -30,17 +30,21 @@ var (
 	ErrEmptyCart = errors.New("cart is empty")
 )
 
+// Actor содержит UUID и роль пользователя, выполняющего действие с заказом.
 type Actor struct {
 	UserID string
 	Role   string
 }
+// Item описывает одну заказанную позицию с количеством и зафиксированной ценой.
 type Item struct {
 	ID        string `json:"id"`
 	OrderID   string `json:"order_id"`
 	ProductID string `json:"product_id"`
+	// Price фиксируется при создании позиции заказа и не меняется при обновлении цены товара.
 	Price     int64  `json:"price"`
 	Count     int64  `json:"count"`
 }
+// Order содержит владельца, дату, статус, позиции и сумму заказа в копейках.
 type Order struct {
 	ID       string `json:"id"`
 	UserID   string `json:"user_id"`
@@ -49,26 +53,31 @@ type Order struct {
 	Items    []Item `json:"items,omitempty"`
 	Total    int64  `json:"total"`
 }
+// Page содержит страницу заказов и общее число найденных заказов.
 type Page struct {
 	Items  []Order `json:"items"`
 	Limit  int     `json:"limit"`
 	Offset int     `json:"offset"`
 	Total  int64   `json:"total"`
 }
+// StatusInput содержит новое название статуса из запроса изменения заказа.
 type StatusInput struct {
 	Status string `json:"status"`
 }
+// AddItemInput содержит заказ, товар и положительное количество новой позиции.
 type AddItemInput struct {
 	OrderID   string `json:"order_id"`
 	ProductID string `json:"product_id"`
 	Count     int64  `json:"count"`
 }
+// ListOptions хранит фильтры заказов, даты и параметры постраничного вывода.
 type ListOptions struct {
 	Limit, Offset            int
 	Status, DateFrom, DateTo string
 	From, ToExclusive        string
 }
 
+// IsStatus проверяет, входит ли название в список допустимых статусов заказа.
 func IsStatus(value string) bool {
 	for _, v := range Statuses {
 		if value == v {
@@ -77,6 +86,7 @@ func IsStatus(value string) bool {
 	}
 	return false
 }
+// Validate проверяет количество и оба UUID, возвращая их в стандартном формате.
 func (in AddItemInput) Validate() (string, string, error) {
 	if in.Count < 1 {
 		return "", "", fmt.Errorf("%w: count must be positive", ErrInvalid)
@@ -91,6 +101,7 @@ func (in AddItemInput) Validate() (string, string, error) {
 	}
 	return o.String(), p.String(), nil
 }
+// normalizeID проверяет UUID и приводит его к стандартной записи.
 func normalizeID(value string) (string, error) {
 	id, err := uuid.Parse(value)
 	if err != nil {
@@ -99,6 +110,7 @@ func normalizeID(value string) (string, error) {
 	return id.String(), nil
 }
 
+// ParseListOptions проверяет фильтры, даты и параметры страницы, включая предел limit=100.
 func ParseListOptions(values url.Values) (ListOptions, error) {
 	o := ListOptions{Limit: DefaultLimit}
 	allowed := map[string]bool{"limit": true, "offset": true, "status": true, "date_from": true, "date_to": true}

@@ -14,30 +14,37 @@ import (
 
 const multipartOverhead = 256 << 10
 
+// Application перечисляет операции с фотографиями, необходимые HTTP-обработчику.
 type Application interface {
 	Create(context.Context, string, []byte) (Photo, error)
 	Get(context.Context, string) (Photo, []byte, string, error)
 	Delete(context.Context, string) error
 }
 
+// Handler принимает HTTP-запросы фотографий и вызывает службу проверки и хранения.
 type Handler struct{ service Application }
 
+// NewHandler создаёт HTTP-обработчик фотографий.
 func NewHandler(service Application) *Handler { return &Handler{service: service} }
 
+// RegisterRoutes добавляет публичное чтение и защищённые операции изменения фото.
 func (h *Handler) RegisterRoutes(router chi.Router) {
 	h.RegisterReadRoutes(router)
 	h.RegisterWriteRoutes(router)
 }
 
+// RegisterReadRoutes добавляет публичный маршрут получения фотографии.
 func (h *Handler) RegisterReadRoutes(router chi.Router) {
 	router.Get("/photo/{id}", h.get)
 }
 
+// RegisterWriteRoutes добавляет загрузку и удаление фотографий для защищённой группы.
 func (h *Handler) RegisterWriteRoutes(router chi.Router) {
 	router.Post("/photo", h.create)
 	router.Delete("/photo/{id}", h.delete)
 }
 
+// create требует одно поле product_id и один файл, проверяет размер и передаёт изображение службе.
 func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
 		writePhotoError(w, http.StatusBadRequest, "Content-Type must be multipart/form-data")
@@ -98,6 +105,7 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 	writePhotoJSON(w, http.StatusCreated, item)
 }
 
+// get возвращает байты изображения и безопасные заголовки для его показа в браузере.
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	item, data, contentType, err := h.service.Get(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
@@ -111,6 +119,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 
+// delete удаляет фотографию по UUID и возвращает пустой успешный ответ.
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Delete(r.Context(), chi.URLParam(r, "id")); err != nil {
 		writePhotoServiceError(w, err)
@@ -119,6 +128,7 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// writePhotoServiceError выбирает HTTP-ответ для известных ошибок службы фотографий.
 func writePhotoServiceError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -132,10 +142,12 @@ func writePhotoServiceError(w http.ResponseWriter, err error) {
 	}
 }
 
+// writePhotoError отправляет текст ошибки в JSON с указанным HTTP-кодом.
 func writePhotoError(w http.ResponseWriter, status int, message string) {
 	writePhotoJSON(w, status, map[string]string{"error": message})
 }
 
+// writePhotoJSON кодирует значение в JSON и записывает HTTP-код ответа.
 func writePhotoJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

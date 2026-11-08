@@ -12,6 +12,7 @@ const (
 	MaxLimit     = 100
 )
 
+// Product содержит данные товара, которые каталог возвращает клиенту.
 type Product struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
@@ -22,9 +23,11 @@ type Product struct {
 	Description string `json:"description"`
 	Brand       string `json:"brand"`
 	Season      string `json:"season"`
+	// Price хранится и передаётся в целых копейках.
 	Price       int64  `json:"price"`
 }
 
+// ProductInput содержит поля товара, присланные для создания или полной замены товара.
 type ProductInput struct {
 	Name        string `json:"name"`
 	Type        string `json:"type"`
@@ -37,6 +40,7 @@ type ProductInput struct {
 	Price       int64  `json:"price"`
 }
 
+// Validate требует непустые обязательные поля и запрещает отрицательную цену.
 func (in ProductInput) Validate() error {
 	for field, value := range map[string]string{
 		"name": in.Name, "type": in.Type, "gender": in.Gender,
@@ -52,6 +56,7 @@ func (in ProductInput) Validate() error {
 	return nil
 }
 
+// ListOptions хранит ограничения страницы, фильтры каталога и порядок сортировки.
 type ListOptions struct {
 	Limit  int64
 	Offset int64
@@ -64,6 +69,7 @@ type ListOptions struct {
 	Sort   string
 }
 
+// ProductPage содержит товары одной страницы, её параметры и общее число совпадений.
 type ProductPage struct {
 	Items  []Product `json:"items"`
 	Limit  int64     `json:"limit"`
@@ -71,6 +77,7 @@ type ProductPage struct {
 	Total  int64     `json:"total"`
 }
 
+// ParseListOptions проверяет фильтры, сортировку и пагинацию — вывод списка частями по limit и offset.
 func ParseListOptions(values url.Values) (ListOptions, error) {
 	options := ListOptions{Limit: DefaultLimit}
 	allowed := map[string]bool{

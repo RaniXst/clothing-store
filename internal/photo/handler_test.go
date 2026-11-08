@@ -32,6 +32,7 @@ type photoTestApp struct {
 	productID string
 }
 
+// newPhotoTestApp подготавливает тестовые базу, файловое хранилище и HTTP-маршруты фотографий.
 func newPhotoTestApp(t *testing.T) photoTestApp {
 	t.Helper()
 	db, err := database.Open(context.Background(), filepath.Join(t.TempDir(), "test.db"))
@@ -63,6 +64,7 @@ func newPhotoTestApp(t *testing.T) photoTestApp {
 	return photoTestApp{router: router, db: db, files: files, productID: item.ID}
 }
 
+// pngBytes создаёт небольшое корректное PNG-изображение прямо в тесте.
 func pngBytes(t *testing.T) []byte {
 	t.Helper()
 	img := image.NewRGBA(image.Rect(0, 0, 2, 2))
@@ -74,6 +76,7 @@ func pngBytes(t *testing.T) []byte {
 	return buffer.Bytes()
 }
 
+// uploadRequest упаковывает изображение и UUID товара в multipart-запрос загрузки.
 func uploadRequest(t *testing.T, app photoTestApp, data []byte, productID string) *httptest.ResponseRecorder {
 	t.Helper()
 	var body bytes.Buffer

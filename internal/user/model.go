@@ -8,6 +8,7 @@ import (
 )
 
 const (
+	// Системные роли получают постоянные идентификаторы из миграций.
 	ClientRoleID  = "11111111-1111-4111-8111-111111111111"
 	ManagerRoleID = "22222222-2222-4222-8222-222222222222"
 	AdminRoleID   = "33333333-3333-4333-8333-333333333333"
@@ -15,11 +16,13 @@ const (
 	MaxLimit      = 100
 )
 
+// Role описывает роль пользователя, которая определяет его права в приложении.
 type Role struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 }
 
+// User содержит профиль пользователя и его роль; PasswordHash нужен только серверу.
 type User struct {
 	ID               string `json:"id"`
 	Name             string `json:"name"`
@@ -27,9 +30,11 @@ type User struct {
 	Phone            string `json:"phone"`
 	Role             Role   `json:"role"`
 	RegistrationDate string `json:"registration_date"`
+	// PasswordHash хранится в базе, но исключён из JSON-ответов.
 	PasswordHash     string `json:"-"`
 }
 
+// CreateInput хранит данные, которые администратор передаёт для создания пользователя.
 type CreateInput struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
@@ -38,6 +43,7 @@ type CreateInput struct {
 	Password string `json:"password"`
 }
 
+// UpdateInput содержит поля профиля и роль, которые заменяются при изменении пользователя.
 type UpdateInput struct {
 	Name   string `json:"name"`
 	Email  string `json:"email"`
@@ -45,10 +51,12 @@ type UpdateInput struct {
 	RoleID string `json:"role_id"`
 }
 
+// RoleInput содержит название новой или изменяемой роли.
 type RoleInput struct {
 	Name string `json:"name"`
 }
 
+// Page объединяет часть списка пользователей с параметрами постраничного вывода.
 type Page struct {
 	Items  []User `json:"items"`
 	Limit  int    `json:"limit"`
@@ -58,6 +66,7 @@ type Page struct {
 
 var roleNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}$`)
 
+// NormalizeEmail проверяет адрес почты и приводит его к нижнему регистру для поиска без учёта регистра.
 func NormalizeEmail(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	parsed, err := mail.ParseAddress(value)
@@ -67,6 +76,7 @@ func NormalizeEmail(value string) (string, error) {
 	return strings.ToLower(value), nil
 }
 
+// ValidateIdentity проверяет имя, почту и телефон; возвращает почту в нормализованном виде.
 func ValidateIdentity(name, email, phone string) (string, error) {
 	if strings.TrimSpace(name) == "" || len(name) > 200 {
 		return "", fmt.Errorf("name must contain 1 to 200 characters")
@@ -81,6 +91,7 @@ func ValidateIdentity(name, email, phone string) (string, error) {
 	return normalizedEmail, nil
 }
 
+// ValidateRoleName допускает короткое имя роли из строчных букв, цифр, дефиса и подчёркивания.
 func ValidateRoleName(name string) error {
 	if !roleNamePattern.MatchString(name) {
 		return fmt.Errorf("role name must be 2 to 32 lowercase letters, digits, '_' or '-' and start with a letter")
@@ -88,10 +99,12 @@ func ValidateRoleName(name string) error {
 	return nil
 }
 
+// IsSystemRoleID сообщает, относится ли идентификатор к одной из трёх встроенных ролей.
 func IsSystemRoleID(id string) bool {
 	return id == ClientRoleID || id == ManagerRoleID || id == AdminRoleID
 }
 
+// IsSystemRoleName проверяет название встроенной роли без учёта регистра.
 func IsSystemRoleName(name string) bool {
 	switch strings.ToLower(name) {
 	case "client", "manager", "admin":

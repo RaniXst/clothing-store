@@ -23,3 +23,5 @@ uploads/*
 .idea/
 .DS_Store
 Thumbs.db
+# Local manual demonstration data (database, cookies, responses)
+/demo-manual/

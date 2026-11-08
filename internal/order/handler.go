@@ -11,9 +11,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Handler принимает HTTP-запросы заказов и передаёт проверку правил службе заказов.
 type Handler struct{ service *Service }
 
+// NewHandler создаёт обработчик заказов.
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+// RegisterRoutes добавляет маршруты заказов; для изменения данных включает CSRF-проверку.
 func (h *Handler) RegisterRoutes(router chi.Router) {
 	router.With(auth.CSRF).Post("/order", h.checkout)
 	router.Get("/order", h.list)
@@ -23,6 +26,7 @@ func (h *Handler) RegisterRoutes(router chi.Router) {
 	router.Get("/order_item/{order_id}", h.items)
 }
 
+// checkout оформляет корзину вошедшего клиента и возвращает созданный заказ.
 func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.Checkout(r.Context(), actor(r))
 	if err != nil {
@@ -32,6 +36,7 @@ func (h *Handler) checkout(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "/order/"+item.ID)
 	writeJSON(w, 201, item)
 }
+// list проверяет фильтры и возвращает доступную этому пользователю страницу заказов.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	options, err := ParseListOptions(r.URL.Query())
 	if err != nil {
@@ -45,6 +50,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, page)
 }
+// get возвращает заказ по UUID, если служба разрешает пользователю его видеть.
 func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	item, err := h.service.Get(r.Context(), actor(r), chi.URLParam(r, "id"))
 	if err != nil {
@@ -53,6 +59,7 @@ func (h *Handler) get(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, item)
 }
+// updateStatus читает новое название статуса, проверяет его и передаёт службе.
 func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 	var input StatusInput
 	if err := decode(w, r, &input); err != nil {
@@ -70,6 +77,7 @@ func (h *Handler) updateStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, item)
 }
+// addItem читает товар и количество, затем добавляет позицию в существующий заказ.
 func (h *Handler) addItem(w http.ResponseWriter, r *http.Request) {
 	var input AddItemInput
 	if err := decode(w, r, &input); err != nil {
@@ -84,6 +92,7 @@ func (h *Handler) addItem(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "/order_item/"+item.OrderID)
 	writeJSON(w, 201, item)
 }
+// items возвращает позиции заказа после проверки прав доступа.
 func (h *Handler) items(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.Items(r.Context(), actor(r), chi.URLParam(r, "order_id"))
 	if err != nil {
@@ -92,10 +101,12 @@ func (h *Handler) items(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": items})
 }
+// actor переносит в службу UUID и роль пользователя из проверенного контекста запроса.
 func actor(r *http.Request) Actor {
 	p, _ := auth.PrincipalFromContext(r.Context())
 	return Actor{UserID: p.User.ID, Role: p.User.Role.Name}
 }
+// decode проверяет Content-Type и размер тела, затем читает один JSON-объект без неизвестных полей.
 func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return errors.New("content type must be json")
@@ -113,6 +124,7 @@ func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	return nil
 }
 
+// writeOrderError переводит ошибки заказов в HTTP-коды, не раскрывая внутренние ошибки базы.
 func writeOrderError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -129,9 +141,11 @@ func writeOrderError(w http.ResponseWriter, err error) {
 		writeError(w, 500, "internal server error")
 	}
 }
+// writeError отправляет JSON-объект с текстом ошибки и её HTTP-кодом.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
+// writeJSON кодирует значение ответа и отправляет его с указанным HTTP-кодом.
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

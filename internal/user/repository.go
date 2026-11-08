@@ -17,6 +17,7 @@ var (
 	ErrHasOrders  = errors.New("user has order history")
 )
 
+// Repository описывает операции, которые сервис выполняет с пользователями и ролями.
 type Repository interface {
 	Create(context.Context, User) error
 	CreateFirstAdmin(context.Context, User) error
@@ -34,13 +35,16 @@ type Repository interface {
 	CountAdmins(context.Context) (int, error)
 }
 
+// SQLRepository выполняет запросы пользователей и ролей к базе SQLite.
 type SQLRepository struct{ db *sql.DB }
 
+// NewSQLRepository создаёт хранилище пользователей, связанное с переданным подключением к базе.
 func NewSQLRepository(db *sql.DB) *SQLRepository { return &SQLRepository{db: db} }
 
 const userSelect = `SELECT u.id, u.name, u.email, u.phone, u.role_id, r.name,
 	u.registration_date, u.password_hash FROM users u JOIN roles r ON r.id = u.role_id`
 
+// Create сохраняет профиль пользователя и его хеш пароля в таблице users.
 func (r *SQLRepository) Create(ctx context.Context, item User) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO users
 		(id, name, email, phone, role_id, registration_date, password_hash)
@@ -49,14 +53,15 @@ func (r *SQLRepository) Create(ctx context.Context, item User) error {
 	return mapConflict(err)
 }
 
+// CreateFirstAdmin атомарно создаёт администратора, только если в базе ещё нет ни одного.
 func (r *SQLRepository) CreateFirstAdmin(ctx context.Context, item User) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	// The no-op update obtains SQLite's write lock before the existence check,
-	// making bootstrap safe against two concurrent CLI invocations.
+	// Пустое обновление получает блокировку записи SQLite до проверки наличия администратора
+	// и предотвращает гонку между двумя одновременными запусками bootstrap.
 	if _, err := tx.ExecContext(ctx, `UPDATE roles SET name=name WHERE id=?`, AdminRoleID); err != nil {
 		return err
 	}
@@ -76,6 +81,7 @@ func (r *SQLRepository) CreateFirstAdmin(ctx context.Context, item User) error {
 	return tx.Commit()
 }
 
+// Get загружает профиль и название роли пользователя по UUID.
 func (r *SQLRepository) Get(ctx context.Context, id string) (User, error) {
 	item, err := scanUser(r.db.QueryRowContext(ctx, userSelect+` WHERE u.id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -84,6 +90,7 @@ func (r *SQLRepository) Get(ctx context.Context, id string) (User, error) {
 	return item, err
 }
 
+// FindByEmail ищет пользователя по заранее нормализованному адресу почты.
 func (r *SQLRepository) FindByEmail(ctx context.Context, email string) (User, error) {
 	item, err := scanUser(r.db.QueryRowContext(ctx, userSelect+` WHERE u.email = ?`, email))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -92,6 +99,7 @@ func (r *SQLRepository) FindByEmail(ctx context.Context, email string) (User, er
 	return item, err
 }
 
+// RoleByName ищет роль по названию без учёта регистра.
 func (r *SQLRepository) RoleByName(ctx context.Context, name string) (Role, error) {
 	var item Role
 	err := r.db.QueryRowContext(ctx, `SELECT id, name FROM roles WHERE name = ? COLLATE NOCASE`, name).Scan(&item.ID, &item.Name)
@@ -101,6 +109,7 @@ func (r *SQLRepository) RoleByName(ctx context.Context, name string) (Role, erro
 	return item, err
 }
 
+// RoleByID загружает роль по её UUID.
 func (r *SQLRepository) RoleByID(ctx context.Context, id string) (Role, error) {
 	var item Role
 	err := r.db.QueryRowContext(ctx, `SELECT id, name FROM roles WHERE id = ?`, id).Scan(&item.ID, &item.Name)
@@ -110,6 +119,7 @@ func (r *SQLRepository) RoleByID(ctx context.Context, id string) (Role, error) {
 	return item, err
 }
 
+// List возвращает страницу пользователей, при заданном roleID отбирая только эту роль.
 func (r *SQLRepository) List(ctx context.Context, limit, offset int, roleID string) ([]User, int64, error) {
 	where, args := "", []any{}
 	if roleID != "" {
@@ -137,6 +147,7 @@ func (r *SQLRepository) List(ctx context.Context, limit, offset int, roleID stri
 	return items, total, rows.Err()
 }
 
+// Update изменяет профиль и роль; не позволяет снять роль у последнего администратора.
 func (r *SQLRepository) Update(ctx context.Context, id string, input UpdateInput) (User, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -175,6 +186,7 @@ func (r *SQLRepository) Update(ctx context.Context, id string, input UpdateInput
 	return r.Get(ctx, id)
 }
 
+// Delete нельзя выполнить для пользователя с заказами или для последнего администратора.
 func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -209,6 +221,7 @@ func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// ListRoles возвращает все роли, упорядоченные по названию.
 func (r *SQLRepository) ListRoles(ctx context.Context) ([]Role, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT id, name FROM roles ORDER BY name`)
 	if err != nil {
@@ -226,11 +239,13 @@ func (r *SQLRepository) ListRoles(ctx context.Context) ([]Role, error) {
 	return items, rows.Err()
 }
 
+// CreateRole записывает новую роль и преобразует конфликт уникальности в понятную ошибку.
 func (r *SQLRepository) CreateRole(ctx context.Context, item Role) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO roles (id, name) VALUES (?, ?)`, item.ID, item.Name)
 	return mapConflict(err)
 }
 
+// UpdateRole изменяет название пользовательской роли; системные роли остаются неизменными.
 func (r *SQLRepository) UpdateRole(ctx context.Context, id string, input RoleInput) (Role, error) {
 	if IsSystemRoleID(id) {
 		return Role{}, ErrSystemRole
@@ -249,6 +264,7 @@ func (r *SQLRepository) UpdateRole(ctx context.Context, id string, input RoleInp
 	return r.RoleByID(ctx, id)
 }
 
+// DeleteRole удаляет пользовательскую роль, если на неё не ссылаются пользователи.
 func (r *SQLRepository) DeleteRole(ctx context.Context, id string) error {
 	if IsSystemRoleID(id) {
 		return ErrSystemRole
@@ -270,18 +286,21 @@ func (r *SQLRepository) DeleteRole(ctx context.Context, id string) error {
 	return nil
 }
 
+// CountAdmins считает пользователей со встроенной ролью администратора.
 func (r *SQLRepository) CountAdmins(ctx context.Context) (int, error) {
 	var count int
 	err := r.db.QueryRowContext(ctx, `SELECT count(*) FROM users WHERE role_id=?`, AdminRoleID).Scan(&count)
 	return count, err
 }
 
+// scanUser переносит столбцы одной строки SQL в структуру User.
 func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	var item User
 	err := row.Scan(&item.ID, &item.Name, &item.Email, &item.Phone, &item.Role.ID, &item.Role.Name, &item.RegistrationDate, &item.PasswordHash)
 	return item, err
 }
 
+// mapConflict превращает ошибки уникальности и внешних ключей в ErrConflict.
 func mapConflict(err error) error {
 	if err == nil {
 		return nil

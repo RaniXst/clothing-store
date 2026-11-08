@@ -28,6 +28,7 @@ type productTestApp struct {
 	files  *storage.Local
 }
 
+// newProductTestApp создаёт тестовый обработчик товаров и изолированную базу данных.
 func newProductTestApp(t *testing.T) productTestApp {
 	t.Helper()
 	db, err := database.Open(context.Background(), t.TempDir()+"/test.db")
@@ -50,6 +51,7 @@ func newProductTestApp(t *testing.T) productTestApp {
 	return productTestApp{router: router, db: db, files: files}
 }
 
+// productRequest отправляет запрос к тестовому API каталога и возвращает HTTP-ответ.
 func productRequest(app productTestApp, method, target string, body []byte) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, target, bytes.NewReader(body))
 	if body != nil {

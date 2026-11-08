@@ -12,6 +12,7 @@ import (
 
 var ErrUnauthenticated = errors.New("unauthenticated")
 
+// Session хранит данные входа: в базе находятся SHA-256-хеши токенов, а не их исходные значения.
 type Session struct {
 	TokenHash string
 	CSRFHash  string
@@ -20,6 +21,7 @@ type Session struct {
 	ExpiresAt time.Time
 }
 
+// SessionRepository описывает сохранение, чтение и удаление серверных сессий.
 type SessionRepository interface {
 	Create(context.Context, Session) error
 	Get(context.Context, string) (Session, error)
@@ -27,12 +29,15 @@ type SessionRepository interface {
 	DeleteExpired(context.Context, time.Time) error
 }
 
+// SQLSessionRepository выполняет операции сессий в SQLite.
 type SQLSessionRepository struct{ db *sql.DB }
 
+// NewSQLSessionRepository создаёт SQL-хранилище сессий для переданной базы.
 func NewSQLSessionRepository(db *sql.DB) *SQLSessionRepository {
 	return &SQLSessionRepository{db: db}
 }
 
+// Create записывает данные сессии, включая хеши токенов и срок действия.
 func (r *SQLSessionRepository) Create(ctx context.Context, item Session) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO auth_sessions
 		(token_hash, csrf_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
@@ -41,6 +46,7 @@ func (r *SQLSessionRepository) Create(ctx context.Context, item Session) error {
 	return err
 }
 
+// Get ищет сессию по хешу токена и разбирает сохранённые даты.
 func (r *SQLSessionRepository) Get(ctx context.Context, tokenHash string) (Session, error) {
 	var item Session
 	var createdAt, expiresAt string
@@ -63,20 +69,24 @@ func (r *SQLSessionRepository) Get(ctx context.Context, tokenHash string) (Sessi
 	return item, nil
 }
 
+// Delete удаляет сессию по хешу её токена.
 func (r *SQLSessionRepository) Delete(ctx context.Context, tokenHash string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE token_hash=?`, tokenHash)
 	return err
 }
 
+// DeleteExpired удаляет сессии, срок которых закончился к указанному времени.
 func (r *SQLSessionRepository) DeleteExpired(ctx context.Context, now time.Time) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM auth_sessions WHERE expires_at <= ?`, formatSessionTime(now))
 	return err
 }
 
+// formatSessionTime переводит дату сессии в единый текстовый формат UTC для SQLite.
 func formatSessionTime(value time.Time) string {
 	return value.UTC().Format("2006-01-02T15:04:05.000000000Z07:00")
 }
 
+// AccountRepository описывает нужные сервису операции с профилями и ролями пользователей.
 type AccountRepository interface {
 	Create(context.Context, user.User) error
 	Get(context.Context, string) (user.User, error)

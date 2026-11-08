@@ -9,6 +9,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// openMemoryDB создаёт временную SQLite-базу в памяти для тестов миграций.
 func openMemoryDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("sqlite", ":memory:")

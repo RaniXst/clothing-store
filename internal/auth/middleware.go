@@ -10,13 +10,16 @@ import (
 	"github.com/RaniXst/clothing-store/internal/user"
 )
 
+// principalKey задаёт отдельный ключ для данных вошедшего пользователя в контексте запроса.
 type principalKey struct{}
 
+// PrincipalFromContext достаёт данные вошедшего пользователя из контекста HTTP-запроса.
 func PrincipalFromContext(ctx context.Context) (Principal, bool) {
 	principal, ok := ctx.Value(principalKey{}).(Principal)
 	return principal, ok
 }
 
+// RequireSession проверяет cookie входа и передаёт запрос дальше только с действующей сессией.
 func (s *Service) RequireSession(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cookie, err := r.Cookie(sessionCookieName)
@@ -38,6 +41,7 @@ func (s *Service) RequireSession(next http.Handler) http.Handler {
 	})
 }
 
+// RequireRoles пропускает запрос только при наличии данных вошедшего пользователя и одной из разрешённых ролей.
 func RequireRoles(roleNames ...string) func(http.Handler) http.Handler {
 	allowed := make(map[string]struct{}, len(roleNames))
 	for _, name := range roleNames {
@@ -59,6 +63,8 @@ func RequireRoles(roleNames ...string) func(http.Handler) http.Handler {
 	}
 }
 
+// CSRF проверяет небезопасные методы: cookie должна совпадать с заголовком,
+// а её хеш — с хешем, сохранённым в сессии.
 func CSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
@@ -80,6 +86,7 @@ func CSRF(next http.Handler) http.Handler {
 	})
 }
 
+// tokenDigestForCSRF вычисляет SHA-256-отпечаток защитного токена для сравнения с записью сессии.
 func tokenDigestForCSRF(value string) string {
 	digest := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(digest[:])

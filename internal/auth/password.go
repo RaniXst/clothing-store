@@ -19,8 +19,12 @@ const (
 	saltLength       = 16
 )
 
+// PasswordHasher хранит пароли не в исходном виде, а как Argon2id-хеш — специальный
+// отпечаток, который затрудняет подбор пароля.
 type PasswordHasher struct{}
 
+// Hash создаёт уникальную случайную соль и возвращает строку с версией Argon2id,
+// настройками защиты, солью и результатом преобразования пароля.
 func (PasswordHasher) Hash(password string) (string, error) {
 	salt := make([]byte, saltLength)
 	if _, err := rand.Read(salt); err != nil {
@@ -31,6 +35,7 @@ func (PasswordHasher) Hash(password string) (string, error) {
 		base64.RawStdEncoding.EncodeToString(salt), base64.RawStdEncoding.EncodeToString(hash)), nil
 }
 
+// Verify разбирает сохранённую строку, повторно вычисляет результат и безопасно сравнивает его с паролем.
 func (PasswordHasher) Verify(password, encoded string) bool {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" {
@@ -55,6 +60,7 @@ func (PasswordHasher) Verify(password, encoded string) bool {
 	return subtle.ConstantTimeCompare(actual, expected) == 1
 }
 
+// parseParam читает число после ожидаемого префикса; bool показывает, удалось ли это сделать.
 func parseParam(value, prefix string) (int, bool) {
 	if !strings.HasPrefix(value, prefix) {
 		return 0, false

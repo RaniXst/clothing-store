@@ -28,6 +28,7 @@ type authTestApp struct {
 	logBuffer *bytes.Buffer
 }
 
+// newAuthTestApp собирает приложение входа с временной базой и заданным лимитом попыток.
 func newAuthTestApp(t *testing.T, maxLoginAttempts int) authTestApp {
 	t.Helper()
 	db, err := database.Open(context.Background(), t.TempDir()+"/auth.db")
@@ -58,6 +59,7 @@ func newAuthTestApp(t *testing.T, maxLoginAttempts int) authTestApp {
 	return authTestApp{router: router, db: db, service: service, users: users, logBuffer: buffer}
 }
 
+// authRequest отправляет тестовый HTTP-запрос и при необходимости прикрепляет cookie.
 func authRequest(app authTestApp, method, path string, body []byte, cookies ...*http.Cookie) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, bytes.NewReader(body))
 	if body != nil {
@@ -76,6 +78,7 @@ func registerJSON(name, email, phone, password string) []byte {
 	return data
 }
 
+// loginCookies выполняет вход и извлекает обе cookie, нужные следующим запросам теста.
 func loginCookies(t *testing.T, app authTestApp, email, password string) (*http.Cookie, *http.Cookie, *httptest.ResponseRecorder) {
 	t.Helper()
 	body, _ := json.Marshal(Credentials{Email: email, Password: password})

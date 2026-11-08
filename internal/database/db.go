@@ -13,6 +13,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// Open открывает SQLite по dbPath, включает внешние ключи для соединений пула
+// и проверяет доступность базы.
 func Open(ctx context.Context, dbPath string) (*sql.DB, error) {
 	if strings.TrimSpace(dbPath) == "" {
 		return nil, fmt.Errorf("database path cannot be empty")
@@ -54,6 +56,7 @@ func Open(ctx context.Context, dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
+// withForeignKeys добавляет к адресу SQLite настройку, включающую проверку внешних ключей.
 func withForeignKeys(dbPath string) string {
 	separator := "?"
 	if strings.Contains(dbPath, "?") {

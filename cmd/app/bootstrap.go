@@ -17,6 +17,8 @@ import (
 	"github.com/RaniXst/clothing-store/migrations"
 )
 
+// bootstrapAdmin создаёт первого администратора только из интерактивного терминала
+// и принимает пароль без отображения на экране.
 func bootstrapAdmin() error {
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return fmt.Errorf("bootstrap-admin requires an interactive terminal; password is never accepted as an argument")

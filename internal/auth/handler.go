@@ -19,12 +19,14 @@ const (
 	maxAuthBody       = 16 << 10
 )
 
+// Handler принимает запросы входа и регистрации и управляет cookie пользователя.
 type Handler struct {
 	service           *Service
 	limiter           *LoginLimiter
 	forceSecureCookie bool
 }
 
+// NewHandler связывает HTTP-обработчик с сервисом входа и ограничителем попыток.
 func NewHandler(service *Service, limiter *LoginLimiter, forceSecureCookie ...bool) *Handler {
 	handler := &Handler{service: service, limiter: limiter}
 	if len(forceSecureCookie) > 0 {
@@ -33,16 +35,19 @@ func NewHandler(service *Service, limiter *LoginLimiter, forceSecureCookie ...bo
 	return handler
 }
 
+// RegisterPublicRoutes добавляет маршруты регистрации и входа, доступные без сессии.
 func (h *Handler) RegisterPublicRoutes(router chi.Router) {
 	router.Post("/auth/register", h.register)
 	router.Post("/auth/login", h.login)
 }
 
+// RegisterProtectedRoutes добавляет просмотр текущего пользователя и защищённый выход.
 func (h *Handler) RegisterProtectedRoutes(router chi.Router) {
 	router.Get("/auth/me", h.me)
 	router.With(CSRF).Post("/auth/logout", h.logout)
 }
 
+// register проверяет JSON регистрации, создаёт пользователя и возвращает cookie входа.
 func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	var input Registration
 	if err := decodeAuthJSON(w, r, &input); err != nil {
@@ -67,6 +72,7 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{"user": issued.User, "expires_at": issued.ExpiresAt})
 }
 
+// login ограничивает частоту попыток, проверяет пароль и выдаёт cookie при успехе.
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	var input Credentials
 	if err := decodeAuthJSON(w, r, &input); err != nil {
@@ -93,6 +99,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"user": issued.User, "expires_at": issued.ExpiresAt})
 }
 
+// me возвращает профиль пользователя, который уже прошёл проверку сессии.
 func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	principal, ok := PrincipalFromContext(r.Context())
 	if !ok {
@@ -103,6 +110,7 @@ func (h *Handler) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, principal.User)
 }
 
+// logout удаляет серверную сессию и просит браузер удалить обе cookie.
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	cookie, _ := r.Cookie(sessionCookieName)
 	if cookie != nil {
@@ -116,6 +124,8 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// setSessionCookies оставляет CSRF-cookie доступной клиенту для заголовка,
+// а сессионную cookie защищает флагом HttpOnly.
 func (h *Handler) setSessionCookies(w http.ResponseWriter, r *http.Request, issued IssuedSession) {
 	secure := r.TLS != nil || h.forceSecureCookie
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: issued.Token, Path: "/", Expires: issued.ExpiresAt,
@@ -124,6 +134,7 @@ func (h *Handler) setSessionCookies(w http.ResponseWriter, r *http.Request, issu
 		MaxAge: int(SessionLifetime.Seconds()), Secure: secure, SameSite: http.SameSiteStrictMode})
 }
 
+// clearSessionCookies отправляет браузеру cookie с истёкшим сроком действия.
 func (h *Handler) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 	secure := r.TLS != nil || h.forceSecureCookie
 	for _, name := range []string{sessionCookieName, csrfCookieName} {
@@ -132,6 +143,7 @@ func (h *Handler) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// decodeAuthJSON проверяет Content-Type и размер тела, затем читает один JSON-объект.
 func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return fmt.Errorf("Content-Type must be application/json")
@@ -149,13 +161,16 @@ func decodeAuthJSON(w http.ResponseWriter, r *http.Request, destination any) err
 	return nil
 }
 
+// noStore запрещает браузеру и промежуточным серверам сохранять ответ с данными входа.
 func noStore(w http.ResponseWriter) { w.Header().Set("Cache-Control", "no-store") }
 
+// writeAuthError отправляет JSON-ошибку и запрещает кэшировать такой ответ.
 func writeAuthError(w http.ResponseWriter, status int, message string) {
 	noStore(w)
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
+// writeJSON кодирует значение в JSON и отправляет его с указанным HTTP-кодом.
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

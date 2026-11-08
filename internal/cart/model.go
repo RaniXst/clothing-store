@@ -15,6 +15,7 @@ var (
 	ErrConflict = errors.New("cart quantity overflow")
 )
 
+// Item описывает товар, добавленный в корзину, вместе с количеством и текущей ценой.
 type Item struct {
 	ID        string `json:"id"`
 	UserID    string `json:"user_id"`
@@ -24,15 +25,18 @@ type Item struct {
 	Count     int64  `json:"count"`
 }
 
+// AddInput содержит UUID товара и положительное количество для добавления в корзину.
 type AddInput struct {
 	ProductID string `json:"product_id"`
 	Count     int64  `json:"count"`
 }
+// Actor передаёт сервису UUID и роль пользователя из проверенной сессии.
 type Actor struct {
 	UserID string
 	Role   string
 }
 
+// Validate проверяет количество и UUID товара, возвращая UUID в едином формате.
 func (in AddInput) Validate() (string, error) {
 	if in.Count < 1 {
 		return "", fmt.Errorf("%w: count must be positive", ErrInvalid)
@@ -44,6 +48,7 @@ func (in AddInput) Validate() (string, error) {
 	return id.String(), nil
 }
 
+// normalizeID проверяет UUID и приводит его к стандартной записи.
 func normalizeID(value string) (string, error) {
 	id, err := uuid.Parse(value)
 	if err != nil {

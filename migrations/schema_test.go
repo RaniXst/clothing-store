@@ -9,6 +9,7 @@ import (
 	"github.com/RaniXst/clothing-store/internal/database"
 )
 
+// openMigratedDB подготавливает временную базу и применяет к ней все SQL-миграции.
 func openMigratedDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := database.Open(context.Background(), filepath.Join(t.TempDir(), "clothing.db"))

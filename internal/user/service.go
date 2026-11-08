@@ -12,21 +12,26 @@ import (
 	"github.com/google/uuid"
 )
 
+// PasswordHasher задаёт способ безопасно преобразовать пароль в строку для хранения.
 type PasswordHasher interface{ Hash(string) (string, error) }
 
+// Service проверяет правила пользователей и ролей перед обращением к хранилищу.
 type Service struct {
 	repository Repository
 	hasher     PasswordHasher
 }
 
+// NewService связывает хранилище пользователей со средством хеширования паролей.
 func NewService(repository Repository, hasher PasswordHasher) *Service {
 	return &Service{repository: repository, hasher: hasher}
 }
 
+// Register создаёт обычного покупателя; роль всегда берётся из системного набора, а не из запроса.
 func (s *Service) Register(ctx context.Context, name, email, phone, password string) (User, error) {
 	return s.create(ctx, name, email, phone, ClientRoleID, password)
 }
 
+// Create проверяет роль и переданные данные, затем создаёт пользователя.
 func (s *Service) Create(ctx context.Context, input CreateInput) (User, error) {
 	if _, err := uuid.Parse(input.RoleID); err != nil {
 		return User{}, fmt.Errorf("%w: invalid role_id", ErrInvalid)
@@ -34,10 +39,12 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (User, error) {
 	return s.create(ctx, input.Name, input.Email, input.Phone, input.RoleID, input.Password)
 }
 
+// BootstrapAdmin подготавливает первого администратора; повторный запуск отклоняется хранилищем.
 func (s *Service) BootstrapAdmin(ctx context.Context, name, email, phone, password string) (User, error) {
 	return s.createFirstAdmin(ctx, name, email, phone, password)
 }
 
+// create собирает нового пользователя и сохраняет его после проверки входных данных.
 func (s *Service) create(ctx context.Context, name, email, phone, roleID, password string) (User, error) {
 	item, err := s.newUser(ctx, name, email, phone, roleID, password)
 	if err != nil {
@@ -49,6 +56,7 @@ func (s *Service) create(ctx context.Context, name, email, phone, roleID, passwo
 	return item, nil
 }
 
+// createFirstAdmin создаёт пользователя с ролью admin через защиту от повторного bootstrap.
 func (s *Service) createFirstAdmin(ctx context.Context, name, email, phone, password string) (User, error) {
 	item, err := s.newUser(ctx, name, email, phone, AdminRoleID, password)
 	if err != nil {
@@ -60,6 +68,7 @@ func (s *Service) createFirstAdmin(ctx context.Context, name, email, phone, pass
 	return item, nil
 }
 
+// newUser проверяет профиль и роль, хеширует пароль и готовит запись с новым UUID.
 func (s *Service) newUser(ctx context.Context, name, email, phone, roleID, password string) (User, error) {
 	normalizedEmail, err := ValidateIdentity(name, email, phone)
 	if err != nil {
@@ -81,6 +90,7 @@ func (s *Service) newUser(ctx context.Context, name, email, phone, roleID, passw
 	return item, nil
 }
 
+// ValidatePassword требует пароль длиной от 12 до 1024 байт; в UTF-8 один символ может занимать несколько байт.
 func ValidatePassword(password string) error {
 	if len(password) < 12 || len(password) > 1024 {
 		return fmt.Errorf("password must contain 12 to 1024 bytes")
@@ -88,6 +98,7 @@ func ValidatePassword(password string) error {
 	return nil
 }
 
+// Get проверяет UUID и загружает пользователя по его идентификатору.
 func (s *Service) Get(ctx context.Context, id string) (User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -96,6 +107,7 @@ func (s *Service) Get(ctx context.Context, id string) (User, error) {
 	return s.repository.Get(ctx, parsed.String())
 }
 
+// Update проверяет UUID, профиль и существование роли перед заменой полей пользователя.
 func (s *Service) Update(ctx context.Context, id string, input UpdateInput) (User, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -115,6 +127,7 @@ func (s *Service) Update(ctx context.Context, id string, input UpdateInput) (Use
 	return s.repository.Update(ctx, parsed.String(), input)
 }
 
+// Delete проверяет UUID; хранилище не удалит пользователя с заказами или последнего администратора.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -123,6 +136,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return s.repository.Delete(ctx, parsed.String())
 }
 
+// List проверяет параметры страницы и при необходимости фильтрует пользователей по существующей роли.
 func (s *Service) List(ctx context.Context, values url.Values, roleID string) (Page, error) {
 	limit, offset, err := parsePage(values)
 	if err != nil {
@@ -145,6 +159,7 @@ func (s *Service) List(ctx context.Context, values url.Values, roleID string) (P
 	return Page{Items: items, Limit: limit, Offset: offset, Total: total}, nil
 }
 
+// parsePage читает limit и offset, применяет значения по умолчанию и проверяет их границы.
 func parsePage(values url.Values) (int, int, error) {
 	for key := range values {
 		if key != "limit" && key != "offset" {
@@ -172,8 +187,10 @@ func parsePage(values url.Values) (int, int, error) {
 	return limit, offset, nil
 }
 
+// ListRoles возвращает роли, доступные в хранилище.
 func (s *Service) ListRoles(ctx context.Context) ([]Role, error) { return s.repository.ListRoles(ctx) }
 
+// CreateRole проверяет название и запрещает занимать имена встроенных ролей.
 func (s *Service) CreateRole(ctx context.Context, input RoleInput) (Role, error) {
 	input.Name = strings.TrimSpace(input.Name)
 	if err := ValidateRoleName(input.Name); err != nil {
@@ -189,6 +206,7 @@ func (s *Service) CreateRole(ctx context.Context, input RoleInput) (Role, error)
 	return item, nil
 }
 
+// UpdateRole проверяет идентификатор и новое название, не позволяя переименовать в системную роль.
 func (s *Service) UpdateRole(ctx context.Context, id string, input RoleInput) (Role, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -204,6 +222,7 @@ func (s *Service) UpdateRole(ctx context.Context, id string, input RoleInput) (R
 	return s.repository.UpdateRole(ctx, parsed.String(), input)
 }
 
+// DeleteRole проверяет идентификатор и удаляет роль, если правила хранилища это разрешают.
 func (s *Service) DeleteRole(ctx context.Context, id string) error {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -212,4 +231,5 @@ func (s *Service) DeleteRole(ctx context.Context, id string) error {
 	return s.repository.DeleteRole(ctx, parsed.String())
 }
 
+// IsNotFound позволяет определить, означает ли ошибка отсутствие пользователя или роли.
 func IsNotFound(err error) bool { return errors.Is(err, ErrNotFound) }

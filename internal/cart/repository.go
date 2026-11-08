@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Repository описывает операции добавления, просмотра, изменения и удаления позиций корзины.
 type Repository interface {
 	Add(context.Context, string, AddInput) (Item, error)
 	List(context.Context, string) ([]Item, error)
@@ -17,10 +18,13 @@ type Repository interface {
 	Delete(context.Context, string, string) error
 }
 
+// SQLRepository хранит позиции корзины в SQLite и связывает их с товарами.
 type SQLRepository struct{ db *sql.DB }
 
+// NewSQLRepository создаёт SQL-хранилище корзины для переданной базы.
 func NewSQLRepository(db *sql.DB) *SQLRepository { return &SQLRepository{db: db} }
 
+// Add проверяет товар и добавляет количество к существующей позиции того же клиента.
 func (r *SQLRepository) Add(ctx context.Context, userID string, input AddInput) (Item, error) {
 	var exists int
 	err := r.db.QueryRowContext(ctx, "SELECT 1 FROM products WHERE id=?", input.ProductID).Scan(&exists)
@@ -46,6 +50,7 @@ func (r *SQLRepository) Add(ctx context.Context, userID string, input AddInput) 
 	return r.getByProduct(ctx, userID, input.ProductID)
 }
 
+// getByProduct читает строку корзины вместе с названием и ценой товара.
 func (r *SQLRepository) getByProduct(ctx context.Context, userID, productID string) (Item, error) {
 	var item Item
 	err := r.db.QueryRowContext(ctx, `SELECT c.id,c.user_id,c.product_id,p.name,p.price,c.count FROM cart c
@@ -60,6 +65,7 @@ func (r *SQLRepository) getByProduct(ctx context.Context, userID, productID stri
 	return item, nil
 }
 
+// List возвращает позиции только указанного пользователя в порядке добавления.
 func (r *SQLRepository) List(ctx context.Context, userID string) ([]Item, error) {
 	rows, err := r.db.QueryContext(ctx, `SELECT c.id,c.user_id,c.product_id,p.name,p.price,c.count FROM cart c
 		JOIN products p ON p.id=c.product_id WHERE c.user_id=? ORDER BY c.rowid`, userID)
@@ -81,6 +87,7 @@ func (r *SQLRepository) List(ctx context.Context, userID string) ([]Item, error)
 	return items, nil
 }
 
+// Update меняет количество только у позиции, принадлежащей указанному пользователю.
 func (r *SQLRepository) Update(ctx context.Context, userID, cartID string, count int64) (Item, error) {
 	result, err := r.db.ExecContext(ctx, "UPDATE cart SET count=? WHERE id=? AND user_id=?", count, cartID, userID)
 	if err != nil {
@@ -100,6 +107,7 @@ func (r *SQLRepository) Update(ctx context.Context, userID, cartID string, count
 	return r.getByProduct(ctx, userID, productID)
 }
 
+// Delete удаляет позицию только при совпадении её UUID и UUID владельца.
 func (r *SQLRepository) Delete(ctx context.Context, userID, cartID string) error {
 	result, err := r.db.ExecContext(ctx, "DELETE FROM cart WHERE id=? AND user_id=?", cartID, userID)
 	if err != nil {

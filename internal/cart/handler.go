@@ -11,15 +11,19 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+// Handler переводит HTTP-запросы корзины в вызовы службы корзины.
 type Handler struct{ service *Service }
 
+// NewHandler создаёт обработчик корзины с нужной службой.
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
+// RegisterRoutes добавляет маршруты корзины и CSRF-проверку к изменяющим запросам.
 func (h *Handler) RegisterRoutes(router chi.Router) {
 	router.With(auth.CSRF).Post("/cart", h.add)
 	router.Get("/cart/{user_id}", h.list)
 	router.With(auth.CSRF).Put("/cart/{id}", h.update)
 	router.With(auth.CSRF).Delete("/cart/{id}", h.delete)
 }
+// add читает данные товара и количества, затем возвращает созданную позицию корзины.
 func (h *Handler) add(w http.ResponseWriter, r *http.Request) {
 	var input AddInput
 	if err := decode(w, r, &input); err != nil {
@@ -34,6 +38,7 @@ func (h *Handler) add(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Location", "/cart/"+item.ID)
 	writeJSON(w, 201, item)
 }
+// list возвращает позиции корзины пользователя, чей UUID указан в адресе.
 func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.List(r.Context(), actor(r), chi.URLParam(r, "user_id"))
 	if err != nil {
@@ -42,6 +47,7 @@ func (h *Handler) list(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, map[string]any{"items": items})
 }
+// update читает новое количество и изменяет выбранную позицию корзины.
 func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Count int64 `json:"count"`
@@ -57,6 +63,7 @@ func (h *Handler) update(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, 200, item)
 }
+// delete удаляет позицию корзины и возвращает пустой ответ при успехе.
 func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Delete(r.Context(), actor(r), chi.URLParam(r, "id")); err != nil {
 		writeCartError(w, err)
@@ -64,10 +71,12 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(204)
 }
+// actor получает UUID и роль пользователя из запроса после проверки сессии.
 func actor(r *http.Request) Actor {
 	p, _ := auth.PrincipalFromContext(r.Context())
 	return Actor{UserID: p.User.ID, Role: p.User.Role.Name}
 }
+// decode проверяет JSON-запрос, ограничивает его размер и запрещает неизвестные поля.
 func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return errors.New("content type must be json")
@@ -84,6 +93,7 @@ func decode(w http.ResponseWriter, r *http.Request, target any) error {
 	}
 	return nil
 }
+// writeCartError сопоставляет ошибки корзины с HTTP-кодами, не показывая детали базы.
 func writeCartError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -98,9 +108,11 @@ func writeCartError(w http.ResponseWriter, err error) {
 		writeError(w, 500, "internal server error")
 	}
 }
+// writeError отправляет короткое сообщение об ошибке в формате JSON.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
+// writeJSON кодирует данные ответа и устанавливает HTTP-код.
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

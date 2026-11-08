@@ -9,6 +9,7 @@ import (
 	"github.com/joho/godotenv"
 )
 
+// Config содержит настройки HTTP-сервера, SQLite, файлового хранилища и журналирования.
 type Config struct {
 	AppPort          string
 	DBPath           string
@@ -17,6 +18,7 @@ type Config struct {
 	LogLevel         string
 }
 
+// Load читает настройки из окружения и .env, проверяет значения и применяет значения по умолчанию.
 func Load() (Config, error) {
 	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		return Config{}, fmt.Errorf("load .env: %w", err)
@@ -51,6 +53,7 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
+// getEnv читает переменную окружения, а если её нет — возвращает значение по умолчанию.
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value

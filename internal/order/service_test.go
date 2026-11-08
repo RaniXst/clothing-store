@@ -30,6 +30,7 @@ type orderFixture struct {
 	client, other, manager, admin Actor
 }
 
+// newOrderFixture создаёт тестовую базу, службы заказов и несколько товаров для сценариев.
 func newOrderFixture(t *testing.T) *orderFixture {
 	t.Helper()
 	ctx := context.Background()
@@ -61,6 +62,7 @@ func newOrderFixture(t *testing.T) *orderFixture {
 func (f *orderFixture) addCart(product string, count int64) {
 	f.tExec(`INSERT INTO cart(id,user_id,product_id,count) VALUES(?,?,?,?)`, uuid.NewString(), clientID, product, count)
 }
+// tExec выполняет SQL-команду подготовки теста и завершает тест при ошибке.
 func (f *orderFixture) tExec(query string, args ...any) {
 	_, err := f.db.ExecContext(f.ctx, query, args...)
 	if err != nil {

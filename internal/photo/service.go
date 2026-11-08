@@ -31,6 +31,7 @@ var (
 	ErrProductAbsent = errors.New("product not found")
 )
 
+// Repository описывает чтение и изменение сведений о фотографиях в базе.
 type Repository interface {
 	Create(context.Context, Photo) error
 	Get(context.Context, string) (Photo, error)
@@ -39,10 +40,12 @@ type Repository interface {
 	ListFilenames(context.Context) ([]string, error)
 }
 
+// ProductLookup позволяет проверить, существует ли товар, к которому прикрепляют фото.
 type ProductLookup interface {
 	Get(context.Context, string) (product.Product, error)
 }
 
+// Service проверяет изображения и согласует их сохранение в файловой системе и SQLite.
 type Service struct {
 	repository Repository
 	products   ProductLookup
@@ -50,6 +53,7 @@ type Service struct {
 	mutationMu *sync.Mutex
 }
 
+// NewService соединяет хранилища фотографий, товаров и файлов.
 func NewService(repository Repository, products ProductLookup, files *storage.Local, mutationMu *sync.Mutex) *Service {
 	if mutationMu == nil {
 		mutationMu = &sync.Mutex{}
@@ -57,6 +61,7 @@ func NewService(repository Repository, products ProductLookup, files *storage.Lo
 	return &Service{repository: repository, products: products, files: files, mutationMu: mutationMu}
 }
 
+// Create публикует файл до записи метаданных и пытается удалить файл, если запись в SQLite не удалась.
 func (s *Service) Create(ctx context.Context, productID string, data []byte) (Photo, error) {
 	parsedProductID, err := uuid.Parse(productID)
 	if err != nil {
@@ -81,6 +86,7 @@ func (s *Service) Create(ctx context.Context, productID string, data []byte) (Ph
 		return Photo{}, err
 	}
 	item := Photo{ID: uuid.NewString(), Filename: uuid.NewString() + ext, ProductID: canonicalProductID}
+	// Сначала создаём временную копию, затем публикуем файл; при ошибке метаданных файл убирается.
 	tempName, err := s.files.Prepare(data)
 	if err != nil {
 		return Photo{}, err
@@ -98,6 +104,7 @@ func (s *Service) Create(ctx context.Context, productID string, data []byte) (Ph
 	return item, nil
 }
 
+// Get находит фото по UUID, читает файл и возвращает его метаданные, байты и тип содержимого.
 func (s *Service) Get(ctx context.Context, id string) (Photo, []byte, string, error) {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -121,6 +128,7 @@ func (s *Service) Get(ctx context.Context, id string) (Photo, []byte, string, er
 	return item, data, contentType, nil
 }
 
+// Delete временно перемещает файл и пытается восстановить его, если удалить метаданные не удалось.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	parsed, err := uuid.Parse(id)
 	if err != nil {
@@ -137,6 +145,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
+	// Файл сначала перемещён в папку ожидания; если SQLite не удалит запись, возвращаем файл.
 	if err := s.repository.Delete(ctx, item.ID); err != nil {
 		if restoreErr := s.files.Restore(staged); restoreErr != nil {
 			return errors.Join(err, fmt.Errorf("restore photo: %w", restoreErr))
@@ -149,6 +158,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
+// Recover передаёт файловому хранилищу имена из SQLite для восстановления после прерванной операции.
 func (s *Service) Recover(ctx context.Context) error {
 	filenames, err := s.repository.ListFilenames(ctx)
 	if err != nil {
@@ -161,6 +171,8 @@ func (s *Service) Recover(ctx context.Context) error {
 	return s.files.Recover(referenced)
 }
 
+// validateImage определяет JPEG или PNG по содержимому, проверяет декодирование
+// и отклоняет изображения больше установленного ограничения по пикселям.
 func validateImage(data []byte) (string, string, error) {
 	if len(data) == 0 {
 		return "", "", fmt.Errorf("%w: empty image", ErrInvalid)

@@ -12,17 +12,22 @@ import (
 	"github.com/google/uuid"
 )
 
+// MaxFileSize задаёт максимальный размер файла в байтах.
 const MaxFileSize = 5 << 20
 
+// Local хранит опубликованные файлы и использует отдельные каталоги для временных
+// загрузок и файлов, ожидающих удаления.
 type Local struct {
 	root string
 }
 
+// StagedFile запоминает имя файла и был ли он перемещён в папку ожидающих удаления файлов.
 type StagedFile struct {
 	Filename string
 	Moved    bool
 }
 
+// NewLocal создаёт локальное хранилище и необходимые рабочие каталоги внутри root.
 func NewLocal(root string) (*Local, error) {
 	if strings.TrimSpace(root) == "" {
 		return nil, fmt.Errorf("upload directory cannot be empty")
@@ -40,6 +45,7 @@ func NewLocal(root string) (*Local, error) {
 	return store, nil
 }
 
+// Prepare сохраняет байты изображения во временный файл с ограничением размера.
 func (s *Local) Prepare(data []byte) (string, error) {
 	if len(data) == 0 || len(data) > MaxFileSize {
 		return "", fmt.Errorf("file size must be between 1 byte and %d bytes", MaxFileSize)
@@ -59,6 +65,7 @@ func (s *Local) Prepare(data []byte) (string, error) {
 	return name, nil
 }
 
+// Publish переносит подготовленный файл в основную папку под новым безопасным именем.
 func (s *Local) Publish(tempName, filename string) error {
 	if !validTempName(tempName) || !validFilename(filename) {
 		return fmt.Errorf("invalid generated file name")
@@ -69,6 +76,7 @@ func (s *Local) Publish(tempName, filename string) error {
 	return nil
 }
 
+// RemoveTemp удаляет временную загрузку; отсутствие файла считается успешным результатом.
 func (s *Local) RemoveTemp(name string) error {
 	if !validTempName(name) {
 		return fmt.Errorf("invalid temporary file name")
@@ -79,6 +87,7 @@ func (s *Local) RemoveTemp(name string) error {
 	return nil
 }
 
+// Remove удаляет опубликованный файл, предварительно проверив его имя.
 func (s *Local) Remove(filename string) error {
 	if !validFilename(filename) {
 		return fmt.Errorf("invalid stored file name")
@@ -89,6 +98,7 @@ func (s *Local) Remove(filename string) error {
 	return nil
 }
 
+// Read возвращает содержимое безопасно названного обычного файла в пределах лимита размера.
 func (s *Local) Read(filename string) ([]byte, error) {
 	if !validFilename(filename) {
 		return nil, fmt.Errorf("invalid stored file name")
@@ -116,6 +126,7 @@ func (s *Local) Read(filename string) ([]byte, error) {
 	return data, nil
 }
 
+// StageDelete перемещает файлы в папку ожидания удаления, чтобы их можно было вернуть при ошибке базы.
 func (s *Local) StageDelete(filenames []string) ([]StagedFile, error) {
 	staged := make([]StagedFile, 0, len(filenames))
 	seen := make(map[string]struct{}, len(filenames))
@@ -142,6 +153,7 @@ func (s *Local) StageDelete(filenames []string) ([]StagedFile, error) {
 	return staged, nil
 }
 
+// Restore переносит временно убранные файлы обратно в основную папку.
 func (s *Local) Restore(staged []StagedFile) error {
 	var result error
 	for i := len(staged) - 1; i >= 0; i-- {
@@ -165,6 +177,7 @@ func (s *Local) Restore(staged []StagedFile) error {
 	return result
 }
 
+// Purge окончательно удаляет файлы, которые ранее были перемещены в папку ожидания.
 func (s *Local) Purge(staged []StagedFile) error {
 	var result error
 	for _, entry := range staged {
@@ -178,9 +191,9 @@ func (s *Local) Purge(staged []StagedFile) error {
 	return result
 }
 
-// Recover reconciles staged and orphaned files against filenames still present
-// in SQLite. Unreferenced published files and abandoned upload temps older than
-// one hour are removed; referenced tombstones are restored.
+// Recover сверяет каталог отложенного удаления с метаданными SQLite: нужные файлы
+// восстанавливаются, если опубликованной копии нет; остальные файлы этого каталога
+// удаляются. Бесхозные опубликованные файлы и временные загрузки старше часа удаляются.
 func (s *Local) Recover(referenced map[string]struct{}) error {
 	var result error
 	trashEntries, err := os.ReadDir(s.trashDir())
@@ -208,6 +221,7 @@ func (s *Local) Recover(referenced map[string]struct{}) error {
 	}
 
 	cutoff := time.Now().Add(-time.Hour)
+	// Неопубликованные временные загрузки удаляются только после часового порога.
 	tempEntries, err := os.ReadDir(s.tempDir())
 	if err != nil {
 		return errors.Join(result, fmt.Errorf("read upload temporary directory: %w", err))
@@ -226,6 +240,7 @@ func (s *Local) Recover(referenced map[string]struct{}) error {
 		}
 	}
 
+	// Бесхозные файлы в основной папке также удаляются только если они старше часа.
 	rootEntries, err := os.ReadDir(s.root)
 	if err != nil {
 		return errors.Join(result, fmt.Errorf("read upload directory: %w", err))
@@ -250,9 +265,12 @@ func (s *Local) Recover(referenced map[string]struct{}) error {
 	return result
 }
 
+// tempDir возвращает путь к папке незавершённых загрузок.
 func (s *Local) tempDir() string  { return filepath.Join(s.root, ".tmp") }
+// trashDir возвращает путь к папке файлов, временно убранных перед удалением.
 func (s *Local) trashDir() string { return filepath.Join(s.root, ".trash") }
 
+// validFilename разрешает только UUID-имя файла с расширением JPEG или PNG.
 func validFilename(name string) bool {
 	if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return false
@@ -265,6 +283,7 @@ func validFilename(name string) bool {
 	return err == nil
 }
 
+// validTempName разрешает только UUID-имя временной загрузки с расширением .tmp.
 func validTempName(name string) bool {
 	if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) || filepath.Ext(name) != ".tmp" {
 		return false

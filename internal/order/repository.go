@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 )
 
+// Repository описывает операции чтения, оформления и изменения заказов.
 type Repository interface {
 	Checkout(context.Context, string) (Order, error)
 	List(context.Context, ListOptions, string) (Page, error)
@@ -19,16 +20,21 @@ type Repository interface {
 	AddItem(context.Context, AddItemInput, string) (Item, error)
 	Items(context.Context, string) ([]Item, error)
 }
+// SQLRepository выполняет запросы к заказам и их позициям в SQLite.
 type SQLRepository struct{ db *sql.DB }
 
+// NewSQLRepository создаёт SQL-хранилище заказов для переданной базы.
 func NewSQLRepository(db *sql.DB) *SQLRepository { return &SQLRepository{db: db} }
 
+// Checkout создаёт заказ и позиции, записывает цены на момент оформления и очищает
+// корзину в одной транзакции — группе изменений, которая фиксируется целиком или отменяется.
 func (r *SQLRepository) Checkout(ctx context.Context, userID string) (Order, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Order{}, fmt.Errorf("begin checkout: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+	// Сначала читаем состав корзины и текущие цены, не выходя из общей транзакции.
 	rows, err := tx.QueryContext(ctx, `SELECT c.product_id,c.count,p.price FROM cart c JOIN products p ON p.id=c.product_id WHERE c.user_id=? ORDER BY c.rowid`, userID)
 	if err != nil {
 		return Order{}, fmt.Errorf("read checkout cart: %w", err)
@@ -59,6 +65,7 @@ func (r *SQLRepository) Checkout(ctx context.Context, userID string) (Order, err
 			return Order{}, ErrConflict
 		}
 	}
+	// Создаём заказ и его позиции со снимками цен из прочитанной корзины.
 	item := Order{ID: uuid.NewString(), UserID: userID, DateTime: time.Now().UTC().Format("2006-01-02T15:04:05.000000000Z07:00"), Status: StatusAccepted, Items: make([]Item, 0, len(items))}
 	item.Total = total
 	if _, err := tx.ExecContext(ctx, "INSERT INTO orders(id,user_id,datetime,status) VALUES(?,?,?,?)", item.ID, item.UserID, item.DateTime, item.Status); err != nil {
@@ -72,6 +79,7 @@ func (r *SQLRepository) Checkout(ctx context.Context, userID string) (Order, err
 		}
 		item.Items = append(item.Items, line)
 	}
+	// Корзина очищается до фиксации: при любой ошибке откат отменит все изменения выше.
 	if _, err := tx.ExecContext(ctx, "DELETE FROM cart WHERE user_id=?", userID); err != nil {
 		return Order{}, fmt.Errorf("clear cart: %w", err)
 	}
@@ -81,6 +89,7 @@ func (r *SQLRepository) Checkout(ctx context.Context, userID string) (Order, err
 	return item, nil
 }
 
+// List выбирает заказы по владельцу, статусу и датам, затем возвращает одну страницу.
 func (r *SQLRepository) List(ctx context.Context, o ListOptions, userID string) (Page, error) {
 	where := " WHERE 1=1"
 	args := []any{}
@@ -123,9 +132,26 @@ func (r *SQLRepository) List(ctx context.Context, o ListOptions, userID string) 
 	if err := rows.Err(); err != nil {
 		return Page{}, fmt.Errorf("iterate orders: %w", err)
 	}
+	// Освобождаем единственное соединение до чтения позиций заказов.
+	if err := rows.Close(); err != nil {
+		return Page{}, fmt.Errorf("close orders: %w", err)
+	}
+	for i := range page.Items {
+		lines, err := r.Items(ctx, page.Items[i].ID)
+		if err != nil {
+			return Page{}, err
+		}
+		for _, line := range lines {
+			page.Items[i].Total, err = addAmount(page.Items[i].Total, line.Price, line.Count)
+			if err != nil {
+				return Page{}, ErrConflict
+			}
+		}
+	}
 	return page, nil
 }
 
+// Get загружает заказ с позициями и рассчитывает сумму по зафиксированным ценам.
 func (r *SQLRepository) Get(ctx context.Context, id string) (Order, error) {
 	var item Order
 	err := r.db.QueryRowContext(ctx, "SELECT id,user_id,datetime,status FROM orders WHERE id=?", id).Scan(&item.ID, &item.UserID, &item.DateTime, &item.Status)
@@ -148,6 +174,7 @@ func (r *SQLRepository) Get(ctx context.Context, id string) (Order, error) {
 	return item, nil
 }
 
+// UpdateStatus меняет статус, только если он всё ещё равен ожидаемому значению.
 func (r *SQLRepository) UpdateStatus(ctx context.Context, id, expected, status string) (Order, error) {
 	result, err := r.db.ExecContext(ctx, "UPDATE orders SET status=? WHERE id=? AND status=?", status, id, expected)
 	if err != nil {
@@ -163,6 +190,7 @@ func (r *SQLRepository) UpdateStatus(ctx context.Context, id, expected, status s
 	return r.Get(ctx, id)
 }
 
+// AddItem добавляет позицию только в принятый заказ и сохраняет цену товара на этот момент.
 func (r *SQLRepository) AddItem(ctx context.Context, input AddItemInput, productID string) (Item, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -221,6 +249,7 @@ func (r *SQLRepository) AddItem(ctx context.Context, input AddItemInput, product
 	return item, nil
 }
 
+// addAmount умножает цену на количество и проверяет, что сумма не переполнит int64.
 func addAmount(total, price, count int64) (int64, error) {
 	if price < 0 || count < 1 || (price != 0 && count > math.MaxInt64/price) {
 		return total, ErrConflict
@@ -232,6 +261,7 @@ func addAmount(total, price, count int64) (int64, error) {
 	return total + amount, nil
 }
 
+// Items возвращает сохранённые позиции заданного заказа в порядке добавления.
 func (r *SQLRepository) Items(ctx context.Context, orderID string) ([]Item, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT id,order_id,product_id,price,count FROM order_items WHERE order_id=? ORDER BY rowid", orderID)
 	if err != nil {

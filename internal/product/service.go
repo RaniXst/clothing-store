@@ -18,6 +18,7 @@ var (
 	ErrConflict = errors.New("product is referenced by order history")
 )
 
+// Repository описывает действия службы каталога с записями товаров.
 type Repository interface {
 	Create(context.Context, Product) error
 	Get(context.Context, string) (Product, error)
@@ -26,10 +27,12 @@ type Repository interface {
 	List(context.Context, ListOptions) (ProductPage, error)
 }
 
+// PhotoFiles позволяет службе получить имена файлов фотографий товара перед его удалением.
 type PhotoFiles interface {
 	ListFilenamesForProduct(context.Context, string) ([]string, error)
 }
 
+// Service проверяет данные товара и координирует работу базы с фотографиями.
 type Service struct {
 	repository Repository
 	photos     PhotoFiles
@@ -37,6 +40,7 @@ type Service struct {
 	mutationMu *sync.Mutex
 }
 
+// NewService связывает каталог, фотографии и файловое хранилище для безопасных изменений.
 func NewService(repository Repository, photos PhotoFiles, files *storage.Local, mutationMu *sync.Mutex) *Service {
 	if mutationMu == nil {
 		mutationMu = &sync.Mutex{}
@@ -44,6 +48,7 @@ func NewService(repository Repository, photos PhotoFiles, files *storage.Local, 
 	return &Service{repository: repository, photos: photos, files: files, mutationMu: mutationMu}
 }
 
+// Create проверяет поля товара, назначает UUID и сохраняет новую запись.
 func (s *Service) Create(ctx context.Context, input ProductInput) (Product, error) {
 	if err := input.Validate(); err != nil {
 		return Product{}, fmt.Errorf("%w: %v", ErrInvalid, err)
@@ -59,6 +64,7 @@ func (s *Service) Create(ctx context.Context, input ProductInput) (Product, erro
 	return item, nil
 }
 
+// Get проверяет UUID и возвращает товар с таким идентификатором.
 func (s *Service) Get(ctx context.Context, id string) (Product, error) {
 	canonical, err := normalizeID(id)
 	if err != nil {
@@ -71,6 +77,7 @@ func (s *Service) Get(ctx context.Context, id string) (Product, error) {
 	return item, nil
 }
 
+// Update проверяет UUID и все поля, затем полностью заменяет данные товара.
 func (s *Service) Update(ctx context.Context, id string, input ProductInput) (Product, error) {
 	canonical, err := normalizeID(id)
 	if err != nil {
@@ -82,6 +89,7 @@ func (s *Service) Update(ctx context.Context, id string, input ProductInput) (Pr
 	return s.repository.Update(ctx, canonical, input)
 }
 
+// Delete временно убирает фотографии, удаляет товар и восстанавливает файлы при ошибке базы.
 func (s *Service) Delete(ctx context.Context, id string) error {
 	canonical, err := normalizeID(id)
 	if err != nil {
@@ -99,6 +107,7 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("stage product photo deletion: %w", err)
 	}
+	// Файлы временно убраны до удаления записи товара; при отказе базы возвращаем их на место.
 	if err := s.repository.Delete(ctx, canonical); err != nil {
 		if restoreErr := s.files.Restore(staged); restoreErr != nil {
 			return errors.Join(fmt.Errorf("delete product: %w", err), fmt.Errorf("restore product photos: %w", restoreErr))
@@ -106,16 +115,18 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	if err := s.files.Purge(staged); err != nil {
-		// The database commit already succeeded; startup recovery will finish cleanup.
+		// Изменение базы уже зафиксировано; восстановление при запуске завершит очистку фотографий.
 		slog.Warn("product deleted; photo cleanup deferred", "error", err)
 	}
 	return nil
 }
 
+// List возвращает товары по уже проверенным фильтрам и настройкам страницы.
 func (s *Service) List(ctx context.Context, options ListOptions) (ProductPage, error) {
 	return s.repository.List(ctx, options)
 }
 
+// normalizeID проверяет UUID товара и приводит его к стандартной записи.
 func normalizeID(value string) (string, error) {
 	id, err := uuid.Parse(value)
 	if err != nil {

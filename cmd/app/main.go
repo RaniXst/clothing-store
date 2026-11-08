@@ -28,6 +28,7 @@ import (
 	"github.com/RaniXst/clothing-store/migrations"
 )
 
+// main выбирает запуск приложения или команду первоначального создания администратора.
 func main() {
 	startupLogger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
 	if len(os.Args) > 1 {
@@ -47,6 +48,8 @@ func main() {
 	}
 }
 
+// run загружает конфигурацию, применяет миграции, запускает сервер по адресу `127.0.0.1` и
+// корректно завершает его по сигналу остановки.
 func run() error {
 	cfg, err := config.Load()
 	if err != nil {
@@ -95,6 +98,7 @@ func run() error {
 	}
 }
 
+// buildRouter собирает обработчики и связывает их с сервисами, базой и правами доступа.
 func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir string, secureCookie bool) (chi.Router, error) {
 	fileStore, err := storage.NewLocal(uploadDir)
 	if err != nil {
@@ -127,6 +131,8 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 	photoHandler.RegisterReadRoutes(router)
 	userHandler.RegisterPublicRoutes(router)
 	authHandler.RegisterPublicRoutes(router)
+	// Публичные маршруты зарегистрированы выше; эта группа требует сессию,
+	// а вложенная группа администратора дополнительно проверяет роль и CSRF.
 	router.Group(func(protected chi.Router) {
 		protected.Use(authService.RequireSession)
 		authHandler.RegisterProtectedRoutes(protected)
@@ -154,6 +160,7 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 	return router, nil
 }
 
+// logLevel переводит текстовый уровень из настроек в значение журнала Go.
 func logLevel(level string) slog.Level {
 	switch level {
 	case "debug":

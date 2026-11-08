@@ -8,12 +8,15 @@ import (
 	"strings"
 )
 
+// SQLRepository выполняет SQL-запросы к таблице товаров.
 type SQLRepository struct{ db *sql.DB }
 
+// NewSQLRepository создаёт хранилище каталога для переданной базы SQLite.
 func NewSQLRepository(db *sql.DB) *SQLRepository { return &SQLRepository{db: db} }
 
 const productColumns = `id, name, type, gender, size, color, description, brand, season, price`
 
+// Create добавляет в таблицу products поля нового товара.
 func (r *SQLRepository) Create(ctx context.Context, item Product) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO products (`+productColumns+`)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -22,6 +25,7 @@ func (r *SQLRepository) Create(ctx context.Context, item Product) error {
 	return err
 }
 
+// Get читает все поля товара по UUID и сообщает, если товар отсутствует.
 func (r *SQLRepository) Get(ctx context.Context, id string) (Product, error) {
 	item, err := scanProduct(r.db.QueryRowContext(ctx, `SELECT `+productColumns+` FROM products WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -30,6 +34,7 @@ func (r *SQLRepository) Get(ctx context.Context, id string) (Product, error) {
 	return item, err
 }
 
+// Update заменяет поля существующего товара и возвращает обновлённую запись.
 func (r *SQLRepository) Update(ctx context.Context, id string, input ProductInput) (Product, error) {
 	result, err := r.db.ExecContext(ctx, `UPDATE products SET
 		name = ?, type = ?, gender = ?, size = ?, color = ?, description = ?, brand = ?, season = ?, price = ?
@@ -48,7 +53,9 @@ func (r *SQLRepository) Update(ctx context.Context, id string, input ProductInpu
 	return r.Get(ctx, id)
 }
 
+// Удаление запрещено, если товар уже входит в историю заказов.
 func (r *SQLRepository) Delete(ctx context.Context, id string) error {
+	// Проверка истории заказов и удаление выполняются вместе, чтобы не потерять товар из истории.
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -74,6 +81,7 @@ func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 	return tx.Commit()
 }
 
+// List строит запрос по точным фильтрам, считает совпадения и возвращает нужную страницу.
 func (r *SQLRepository) List(ctx context.Context, options ListOptions) (ProductPage, error) {
 	filters := []struct{ column, value string }{
 		{"type", options.Type}, {"gender", options.Gender}, {"size", options.Size},
@@ -125,8 +133,10 @@ func (r *SQLRepository) List(ctx context.Context, options ListOptions) (ProductP
 	return ProductPage{Items: items, Limit: options.Limit, Offset: options.Offset, Total: total}, nil
 }
 
+// productScanner позволяет читать Product как из одной строки, так и из набора строк SQL.
 type productScanner interface{ Scan(...any) error }
 
+// scanProduct переносит столбцы SQL-строки в поля товара.
 func scanProduct(row productScanner) (Product, error) {
 	var item Product
 	err := row.Scan(&item.ID, &item.Name, &item.Type, &item.Gender, &item.Size,

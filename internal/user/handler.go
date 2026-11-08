@@ -13,14 +13,18 @@ import (
 
 const maxUserBody = 64 << 10
 
+// Handler принимает HTTP-запросы пользователей и ролей и передаёт работу сервису.
 type Handler struct{ service *Service }
 
+// NewHandler создаёт HTTP-обработчик, использующий сервис пользователей.
 func NewHandler(service *Service) *Handler { return &Handler{service: service} }
 
+// RegisterPublicRoutes регистрирует открытый маршрут просмотра ролей.
 func (h *Handler) RegisterPublicRoutes(router chi.Router) {
 	router.Get("/role", h.listRoles)
 }
 
+// RegisterAdminRoutes регистрирует операции с пользователями и ролями для защищённой группы администратора.
 func (h *Handler) RegisterAdminRoutes(router chi.Router) {
 	router.Post("/user", h.createUser)
 	router.Get("/user", h.listUsers)
@@ -32,6 +36,7 @@ func (h *Handler) RegisterAdminRoutes(router chi.Router) {
 	router.Delete("/role/{id}", h.deleteRole)
 }
 
+// createUser читает данные пользователя из JSON, вызывает сервис и возвращает созданную запись.
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var input CreateInput
 	if err := decodeJSON(w, r, &input); err != nil {
@@ -47,6 +52,7 @@ func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
+// listUsers возвращает страницу пользователей с параметрами из URL.
 func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 	page, err := h.service.List(r.Context(), r.URL.Query(), "")
 	if err != nil {
@@ -56,6 +62,7 @@ func (h *Handler) listUsers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+// listUsersByRole возвращает страницу пользователей с ролью из адреса запроса.
 func (h *Handler) listUsersByRole(w http.ResponseWriter, r *http.Request) {
 	page, err := h.service.List(r.Context(), r.URL.Query(), chi.URLParam(r, "id"))
 	if err != nil {
@@ -65,6 +72,7 @@ func (h *Handler) listUsersByRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, page)
 }
 
+// updateUser читает новые поля профиля и передаёт их сервису для проверки и сохранения.
 func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	var input UpdateInput
 	if err := decodeJSON(w, r, &input); err != nil {
@@ -79,6 +87,7 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+// deleteUser удаляет пользователя по UUID и возвращает пустой успешный ответ.
 func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Delete(r.Context(), chi.URLParam(r, "id")); err != nil {
 		writeUserError(w, err)
@@ -87,6 +96,7 @@ func (h *Handler) deleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// listRoles возвращает список доступных ролей.
 func (h *Handler) listRoles(w http.ResponseWriter, r *http.Request) {
 	items, err := h.service.ListRoles(r.Context())
 	if err != nil {
@@ -96,6 +106,7 @@ func (h *Handler) listRoles(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, items)
 }
 
+// createRole читает название роли из JSON и возвращает результат её создания.
 func (h *Handler) createRole(w http.ResponseWriter, r *http.Request) {
 	var input RoleInput
 	if err := decodeJSON(w, r, &input); err != nil {
@@ -111,6 +122,7 @@ func (h *Handler) createRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
+// updateRole передаёт UUID роли и новое название сервису для проверки и изменения.
 func (h *Handler) updateRole(w http.ResponseWriter, r *http.Request) {
 	var input RoleInput
 	if err := decodeJSON(w, r, &input); err != nil {
@@ -125,6 +137,7 @@ func (h *Handler) updateRole(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, item)
 }
 
+// deleteRole удаляет роль по UUID и сообщает об ошибках через HTTP-ответ.
 func (h *Handler) deleteRole(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.DeleteRole(r.Context(), chi.URLParam(r, "id")); err != nil {
 		writeUserError(w, err)
@@ -133,6 +146,7 @@ func (h *Handler) deleteRole(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// decodeJSON проверяет тип и размер тела запроса и разбирает один JSON-объект без неизвестных полей.
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return fmt.Errorf("Content-Type must be application/json")
@@ -150,6 +164,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	return nil
 }
 
+// writeUserError выбирает безопасный HTTP-код для ошибки сервиса пользователей или ролей.
 func writeUserError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):
@@ -165,10 +180,12 @@ func writeUserError(w http.ResponseWriter, err error) {
 	}
 }
 
+// writeError формирует JSON-ответ с кодом и текстом ошибки.
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
 }
 
+// writeJSON кодирует значение в JSON и отправляет его с указанным HTTP-кодом.
 func writeJSON(w http.ResponseWriter, status int, value any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

@@ -8,6 +8,8 @@ import (
 	"time"
 )
 
+// LoginLimiter ограничивает число запросов входа для ключа в скользящем окне
+// и хранит счётчики в памяти процесса.
 type LoginLimiter struct {
 	mu      sync.Mutex
 	window  time.Duration
@@ -16,10 +18,12 @@ type LoginLimiter struct {
 	attempt map[string][]time.Time
 }
 
+// NewLoginLimiter создаёт ограничитель с максимумом попыток за заданный промежуток времени.
 func NewLoginLimiter(maximum int, window time.Duration) *LoginLimiter {
 	return &LoginLimiter{maximum: maximum, window: window, now: time.Now, attempt: make(map[string][]time.Time)}
 }
 
+// Allow удаляет старые отметки и сообщает, разрешена ли новая попытка для ключа.
 func (l *LoginLimiter) Allow(key string) bool {
 	now := l.now()
 	l.mu.Lock()
@@ -47,6 +51,7 @@ func (l *LoginLimiter) Allow(key string) bool {
 	return true
 }
 
+// remoteIP извлекает адрес клиента из HTTP-запроса для ограничения попыток входа.
 func remoteIP(request *http.Request) string {
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err == nil {

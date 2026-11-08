@@ -16,6 +16,7 @@ const (
 	testProductID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
 )
 
+// cartFixture создаёт службу корзины и временную базу с нужными начальными таблицами.
 func cartFixture(t *testing.T) (*Service, context.Context) {
 	t.Helper()
 	ctx := context.Background()

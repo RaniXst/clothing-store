@@ -48,15 +48,19 @@ go run ./cmd/app bootstrap-admin
 
 Вход ограничен десятью попытками с одного IP за 15 минут. Неверный email и неверный пароль возвращают одинаковый `401`. Ограничитель хранится в памяти одного процесса и сбрасывается после перезапуска.
 
-Пример регистрации:
+Пример регистрации: `curl` сохраняет сессионную cookie в файл, не печатая заголовки ответа. Не выводите содержимое cookie-файла.
 
 ```bash
-curl -i -X POST http://127.0.0.1:8080/auth/register \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"Test Client","email":"client@example.com","phone":"+70000000000","password":"long example password"}'
+REGISTER_COOKIE_JAR="$(mktemp)"
+curl -sS -c "$REGISTER_COOKIE_JAR" -H 'Content-Type: application/json' \
+  -d '{"name":"Test Client","email":"client@example.com","phone":"+70000000000","password":"long example password"}' \
+  http://127.0.0.1:8080/auth/register
+
+curl -sS -b "$REGISTER_COOKIE_JAR" http://127.0.0.1:8080/auth/me
+rm -f "$REGISTER_COOKIE_JAR"
 ```
 
-Сохраните cookies из ответа для последующих запросов. Для изменяющего действия возьмите значение CSRF-cookie и передайте его в `X-CSRF-Token`.
+Для изменяющего действия передайте значение CSRF-cookie в заголовке `X-CSRF-Token`; не печатайте cookie jar или его значения в терминал.
 
 ## Пользователи и роли
 
@@ -110,3 +114,182 @@ python tests/db_schema_test.py
 - Распределённое ограничение входа: текущий limiter действует внутри одного процесса.
 
 Сессии сохраняются в SQLite и отзываются при logout. Не запускайте несколько экземпляров приложения на одной папке `UPLOAD_DIR`; синхронизация файлового хранилища рассчитана на один процесс. Для публичного использования потребуется HTTPS, поскольку REST API должен защищать пароль и сессионные cookie при передаче.
+
+## Примеры curl-запросов
+
+Примеры ниже рассчитаны на Bash и локальный сервер по адресу `http://127.0.0.1:8080`. Перед использованием замените значения в угловых скобках на ID из ответов API и укажите тестовые учётные данные. Для первого администратора сначала выполните `go run ./cmd/app bootstrap-admin` в интерактивном терминале. Роль `manager` создаётся администратором через `POST /user` с системным `role_id`, указанным ниже. Не используйте реальные пароли в примерах или командной строке.
+
+Для запросов с сессионной cookie используйте один cookie jar в той же сессии Bash. Cookie jar содержит секреты сессии: не добавляйте его в Git и удалите после работы. Cookie `clothing_session` передаётся curl автоматически; CSRF-cookie `clothing_csrf` дополнительно передаётся заголовком `X-CSRF-Token` для каждого POST/PUT/DELETE, кроме публичных регистрации и входа.
+
+```bash
+BASE_URL='http://127.0.0.1:8080'
+COOKIE_JAR="$(mktemp)"
+# Удалите cookie jar после демонстрации: rm -f "$COOKIE_JAR"
+```
+
+### Аутентификация
+
+`POST /auth/register` и `POST /auth/login` публичны. Регистрация всегда создаёт `client`, поле роли не принимается. Успешные регистрация и вход устанавливают cookies. `GET /auth/me` и `POST /auth/logout` требуют сессию; выход также требует CSRF.
+
+```bash
+# Регистрация тестового клиента; пароль замените локальным тестовым значением.
+curl -sS -c "$COOKIE_JAR" -H 'Content-Type: application/json' \
+  -d '{"name":"Test Client","email":"client@example.test","phone":"+70000000001","password":"<ТЕСТОВЫЙ_ПАРОЛЬ>"}' \
+  "$BASE_URL/auth/register"
+
+# Вход администратора, созданного bootstrap-admin; jar обновится администраторской сессией.
+curl -sS -b "$COOKIE_JAR" -c "$COOKIE_JAR" -H 'Content-Type: application/json' \
+  -d '{"email":"<EMAIL_АДМИНИСТРАТОРА>","password":"<ПАРОЛЬ_АДМИНИСТРАТОРА>"}' \
+  "$BASE_URL/auth/login"
+
+curl -sS -b "$COOKIE_JAR" "$BASE_URL/auth/me"
+
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -c "$COOKIE_JAR" -X POST \
+  -H "X-CSRF-Token: $CSRF_TOKEN" "$BASE_URL/auth/logout"
+```
+
+В успешном JSON-ответе нет пароля, хеша пароля или токена. Не добавляйте к auth-запросам `-i` при демонстрации: заголовки `Set-Cookie` содержат секреты сессии.
+
+### Публичный каталог и управление товарами
+
+Чтение списка и товара публично. Для создания, полной замены полей через PUT и удаления требуется сессия администратора и CSRF. Цена передаётся целым числом копеек; для PUT укажите все поля товара.
+
+```bash
+# Публичные фильтры, пагинация и сортировка по возрастанию цены.
+curl -sS --get "$BASE_URL/product" \
+  --data-urlencode 'type=outer' --data-urlencode 'gender=unisex' \
+  --data-urlencode 'brand=Acme' --data-urlencode 'limit=20' \
+  --data-urlencode 'offset=0' --data-urlencode 'sort=price_asc'
+
+curl -sS "$BASE_URL/product/<UUID_ТОВАРА>"
+
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Jacket","type":"outer","gender":"unisex","size":"M","color":"black","description":"Cotton jacket","brand":"Acme","season":"winter","price":9900}' \
+  "$BASE_URL/product"
+
+# PUT выполняет полную замену полей, кроме ID.
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Winter Jacket","type":"outer","gender":"unisex","size":"M","color":"black","description":"Cotton jacket","brand":"Acme","season":"winter","price":10900}' \
+  "$BASE_URL/product/<UUID_ТОВАРА>"
+
+curl -sS -b "$COOKIE_JAR" -X DELETE -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/product/<UUID_ТОВАРА>"
+```
+
+Для списка допустимы точные фильтры `type`, `gender`, `size`, `color`, `brand`, `season`; сортировка — `sort=price_asc` или `sort=price_desc`. `limit` задаётся от 1 до 100, по умолчанию 20; `offset` по умолчанию 0. Неизвестные или неверные параметры возвращают `400`.
+
+### Фотографии
+
+Получение фотографии публично. Загрузка и удаление требуют администратора и CSRF. Файл должен быть доступным локальным JPEG или PNG; действуют лимиты размера и разрешения, описанные выше. Перед запуском подготовьте файл `test-image.png` в текущем каталоге (не добавляя его в репозиторий) либо замените `./test-image.png` в команде на путь к существующему локальному PNG или JPEG; для JPEG укажите `type=image/jpeg`.
+
+```bash
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -F 'product_id=<UUID_ТОВАРА>' -F 'file=@./test-image.png;type=image/png' \
+  "$BASE_URL/photo"
+
+# GET возвращает бинарные данные изображения, а не JSON.
+curl -sS "$BASE_URL/photo/<UUID_ФОТОГРАФИИ>" -o ./photo-download.png
+
+curl -sS -b "$COOKIE_JAR" -X DELETE -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/photo/<UUID_ФОТОГРАФИИ>"
+```
+
+### Пользователи и роли
+
+`GET /role` публичен. Все остальные маршруты этого раздела требуют администратора; POST/PUT/DELETE также требуют CSRF. Для изменения и удаления используйте ID из фактических ответов. Пользователя с историей заказов удалить нельзя (`409`); системные роли нельзя переименовать или удалить.
+
+```bash
+curl -sS "$BASE_URL/role"
+
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"support_test"}' "$BASE_URL/role"
+
+# Создание менеджера администратором; системный ID роли manager задан миграцией.
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Test Manager","email":"manager@example.test","phone":"+70000000002","role_id":"22222222-2222-4222-8222-222222222222","password":"<ТЕСТОВЫЙ_ПАРОЛЬ>"}' \
+  "$BASE_URL/user"
+
+curl -sS -b "$COOKIE_JAR" "$BASE_URL/user?limit=20&offset=0"
+curl -sS -b "$COOKIE_JAR" \
+  "$BASE_URL/user/role/22222222-2222-4222-8222-222222222222?limit=20&offset=0"
+
+# PUT пользователя заменяет name, email, phone и role_id; пароль в этот запрос не входит.
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"Test Manager Updated","email":"manager@example.test","phone":"+70000000002","role_id":"22222222-2222-4222-8222-222222222222"}' \
+  "$BASE_URL/user/<UUID_ПОЛЬЗОВАТЕЛЯ>"
+
+curl -sS -b "$COOKIE_JAR" -X DELETE -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/user/<UUID_ПОЛЬЗОВАТЕЛЯ>"
+
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"name":"reviewer"}' \
+  "$BASE_URL/role/<UUID_ПОЛЬЗОВАТЕЛЬСКОЙ_РОЛИ>"
+curl -sS -b "$COOKIE_JAR" -X DELETE -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/role/<UUID_ПОЛЬЗОВАТЕЛЬСКОЙ_РОЛИ>"
+```
+
+Системные ID ролей: `client` — `11111111-1111-4111-8111-111111111111`, `manager` — `22222222-2222-4222-8222-222222222222`, `admin` — `33333333-3333-4333-8333-333333333333`. Для создания клиента через `POST /user` используйте ID `client`; публичная регистрация сама назначает эту роль.
+
+### Корзина
+
+Все маршруты корзины требуют сессию клиента; клиент может работать только со своей корзиной. POST/PUT/DELETE требуют CSRF. Возьмите `USER_ID` и `CART_ITEM_ID` из ответов `/auth/me` и API корзины.
+
+```bash
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"product_id":"<UUID_ТОВАРА>","count":2}' \
+  "$BASE_URL/cart"
+
+curl -sS -b "$COOKIE_JAR" "$BASE_URL/cart/<UUID_ПОЛЬЗОВАТЕЛЯ>"
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"count":3}' \
+  "$BASE_URL/cart/<UUID_СТРОКИ_КОРЗИНЫ>"
+curl -sS -b "$COOKIE_JAR" -X DELETE -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/cart/<UUID_СТРОКИ_КОРЗИНЫ>"
+```
+
+### Заказы и позиции заказа
+
+Оформление, список и чтение заказа доступны клиенту, менеджеру и администратору с учётом области доступа: клиент видит только собственные заказы, менеджер и администратор — все. Клиент создаёт заказ только для своей корзины; POST/PUT требуют CSRF. Клиент может отменить только заказ `Принят`. Менеджер и администратор меняют статусы по разрешённым переходам. Создание позиции заказа доступно менеджеру или администратору, чтение — владельцу заказа, менеджеру или администратору.
+
+```bash
+# Клиент оформляет свою непустую корзину; тело не требуется.
+CSRF_TOKEN="$(awk '$6 == "clothing_csrf" {print $7}' "$COOKIE_JAR")"
+curl -sS -b "$COOKIE_JAR" -X POST -H "X-CSRF-Token: $CSRF_TOKEN" \
+  "$BASE_URL/order"
+
+# Список заказов с опциональными фильтрами и пагинацией.
+curl -sS -b "$COOKIE_JAR" --get "$BASE_URL/order" \
+  --data-urlencode 'limit=20' --data-urlencode 'offset=0' \
+  --data-urlencode 'status=Принят' --data-urlencode 'date_from=2026-01-01' \
+  --data-urlencode 'date_to=2026-01-31'
+curl -sS -b "$COOKIE_JAR" "$BASE_URL/order/<UUID_ЗАКАЗА>"
+curl -sS -b "$COOKIE_JAR" "$BASE_URL/order_item/<UUID_ЗАКАЗА>"
+
+# Только менеджер или администратор: добавить позицию в заказ со статусом «Принят».
+curl -sS -b "$COOKIE_JAR" -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"order_id":"<UUID_ЗАКАЗА>","product_id":"<UUID_ТОВАРА>","count":1}' \
+  "$BASE_URL/order_item"
+
+# Пример менеджерского перехода «Принят» → «В работе».
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"status":"В работе"}' \
+  "$BASE_URL/order/<UUID_ЗАКАЗА>"
+
+# Клиент вместо этого может отменить только собственный заказ в статусе «Принят».
+curl -sS -b "$COOKIE_JAR" -X PUT -H "X-CSRF-Token: $CSRF_TOKEN" \
+  -H 'Content-Type: application/json' -d '{"status":"Отменён"}' \
+  "$BASE_URL/order/<UUID_СВОЕГО_ЗАКАЗА>"
+```
+
+Допустимые переходы сотрудника: `Принят → В работе` или `Отменён`; `В работе → Собран` или `Отменён`; `Собран → Готов к выдаче`. Статусы `Готов к выдаче` и `Отменён` конечные. Для дат указывайте `YYYY-MM-DD`; границы фильтра включительны в UTC. Пустая корзина при оформлении даёт `409`. Команды здесь иллюстрируют контракт API; для выполнения последовательности войдите в нужную учётную запись (администратор или менеджер для staff-команд, клиент для корзины и оформления) и заново получите CSRF-cookie после входа.

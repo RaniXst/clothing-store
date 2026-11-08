@@ -13,21 +13,21 @@ import (
 	"time"
 )
 
-// SQL migrations are embedded in the application binary so startup does not
-// depend on the process working directory.
+// SQL-миграции встраиваются в бинарный файл приложения, поэтому запуск
+// не зависит от текущей рабочей директории.
 //
 //go:embed *.sql
 var migrationFiles embed.FS
 
 const ledgerTable = "schema_migrations"
 
-// Apply applies every unapplied migration in filename order. The ledger and
-// all pending migrations are committed in one transaction, so an error leaves
-// no partially applied schema behind.
+// Apply запускает ещё не выполненные SQL-обновления структуры базы по именам файлов.
+// Журнал и обновления фиксируются одной транзакцией — группой действий, которая применяется целиком или отменяется.
 func Apply(ctx context.Context, db *sql.DB) error {
 	return apply(ctx, db, migrationFiles)
 }
 
+// apply читает SQL-файлы из source, пропускает уже выполненные и применяет остальные одной транзакцией.
 func apply(ctx context.Context, db *sql.DB, source fs.FS) error {
 	names, err := fs.Glob(source, "*.sql")
 	if err != nil {

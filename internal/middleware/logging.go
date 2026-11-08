@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// Logging возвращает HTTP-посредник, который записывает метод, путь и длительность запроса.
 func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
