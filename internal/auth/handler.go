@@ -127,6 +127,8 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 // setSessionCookies оставляет CSRF-cookie доступной клиенту для заголовка,
 // а сессионную cookie защищает флагом HttpOnly.
 func (h *Handler) setSessionCookies(w http.ResponseWriter, r *http.Request, issued IssuedSession) {
+	// Сессионную cookie браузер отправляет сам, поэтому скрипту не нужен доступ к её значению.
+	// Отдельная CSRF-cookie доступна скрипту, чтобы передать её значение в заголовке.
 	secure := r.TLS != nil || h.forceSecureCookie
 	http.SetCookie(w, &http.Cookie{Name: sessionCookieName, Value: issued.Token, Path: "/", Expires: issued.ExpiresAt,
 		MaxAge: int(SessionLifetime.Seconds()), HttpOnly: true, Secure: secure, SameSite: http.SameSiteStrictMode})

@@ -47,6 +47,7 @@ func TestStageDeleteRestoreAndPurge(t *testing.T) {
 	}
 }
 
+// Заранее создаём следы прерванного удаления и лишней загрузки, чтобы проверить восстановление без необходимости аварийно останавливать процесс.
 func TestRecoverRestoresReferencedTombstoneAndRemovesOrphan(t *testing.T) {
 	store, err := NewLocal(t.TempDir())
 	if err != nil {

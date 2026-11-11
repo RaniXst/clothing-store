@@ -79,6 +79,7 @@ func TestSchemaAndSeedRoles(t *testing.T) {
 	}
 }
 
+// Проверяем правила на уровне SQLite, чтобы ограничения действовали и при запросах, которые не проходят через HTTP-слой.
 func TestSchemaConstraintsAndForeignKeys(t *testing.T) {
 	db := openMigratedDB(t)
 	ctx := context.Background()

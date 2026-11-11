@@ -112,6 +112,7 @@ func TestCheckoutSnapshotsPricesClearsCartAndPreventsDuplicate(t *testing.T) {
 	}
 }
 
+// Имитируем ошибку записи позиции после начала оформления. Только так можно отличить полный откат от реализации, которая сохраняет неполный заказ.
 func TestCheckoutRollsBackOrderItemsAndCartOnFailure(t *testing.T) {
 	f := newOrderFixture(t)
 	f.addCart(productID, 1)

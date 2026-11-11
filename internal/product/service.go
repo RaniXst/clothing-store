@@ -103,6 +103,8 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 	if err != nil {
 		return fmt.Errorf("list product photos: %w", err)
 	}
+	// Перемещаем фото во временный каталог до удаления записи. Если база отклонит удаление
+	// из-за истории заказов, файлы можно вернуть на прежнее место.
 	staged, err := s.files.StageDelete(filenames)
 	if err != nil {
 		return fmt.Errorf("stage product photo deletion: %w", err)

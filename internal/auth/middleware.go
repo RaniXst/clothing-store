@@ -65,6 +65,8 @@ func RequireRoles(roleNames ...string) func(http.Handler) http.Handler {
 
 // CSRF проверяет небезопасные методы: cookie должна совпадать с заголовком,
 // а её хеш — с хешем, сохранённым в сессии.
+// Браузер сам прикладывает cookie к запросу. Требование отдельного заголовка подтверждает,
+// что отправитель смог прочитать CSRF-значение, а проверка хеша связывает его с текущей сессией.
 func CSRF(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {

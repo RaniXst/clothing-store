@@ -72,6 +72,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(204)
 }
 // actor получает UUID и роль пользователя из запроса после проверки сессии.
+// Владелец операции определяется сессией. Идентификатор из адреса или тела запроса
+// не подтверждает, что покупатель вправе менять эту корзину.
 func actor(r *http.Request) Actor {
 	p, _ := auth.PrincipalFromContext(r.Context())
 	return Actor{UserID: p.User.ID, Role: p.User.Role.Name}

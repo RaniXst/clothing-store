@@ -14,6 +14,7 @@ def must_fail(conn, sql, params=()):
         return
     raise AssertionError(f"Expected IntegrityError: {sql}")
 
+# Проверяем SQLite напрямую, чтобы нарушение ограничений схемы выявлялось независимо от HTTP-обработчиков.
 def run():
     with tempfile.TemporaryDirectory() as td:
         db_path = Path(td) / "test.db"

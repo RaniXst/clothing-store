@@ -29,6 +29,8 @@ func NewSQLRepository(db *sql.DB) *SQLRepository { return &SQLRepository{db: db}
 // Checkout создаёт заказ и позиции, записывает цены на момент оформления и очищает
 // корзину в одной транзакции — группе изменений, которая фиксируется целиком или отменяется.
 func (r *SQLRepository) Checkout(ctx context.Context, userID string) (Order, error) {
+	// Оформление объединяет чтение корзины, сохранение цен и её очистку в одну транзакцию.
+	// При сбое заказ не появится частично, а корзина останется доступной для повтора.
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return Order{}, fmt.Errorf("begin checkout: %w", err)
@@ -175,6 +177,8 @@ func (r *SQLRepository) Get(ctx context.Context, id string) (Order, error) {
 }
 
 // UpdateStatus меняет статус, только если он всё ещё равен ожидаемому значению.
+// Предыдущий статус входит в условие UPDATE: если два сотрудника открыли один заказ,
+// запоздавший запрос не перезапишет состояние, изменённое первым сотрудником.
 func (r *SQLRepository) UpdateStatus(ctx context.Context, id, expected, status string) (Order, error) {
 	result, err := r.db.ExecContext(ctx, "UPDATE orders SET status=? WHERE id=? AND status=?", status, id, expected)
 	if err != nil {
@@ -250,6 +254,8 @@ func (r *SQLRepository) AddItem(ctx context.Context, input AddItemInput, product
 }
 
 // addAmount умножает цену на количество и проверяет, что сумма не переполнит int64.
+// Сумма хранится целыми копейками. Проверка до умножения и сложения защищает от
+// переполнения, которое иначе могло бы сохранить неверную сумму заказа.
 func addAmount(total, price, count int64) (int64, error) {
 	if price < 0 || count < 1 || (price != 0 && count > math.MaxInt64/price) {
 		return total, ErrConflict

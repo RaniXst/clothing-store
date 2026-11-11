@@ -35,6 +35,9 @@ func (r *SQLRepository) Add(ctx context.Context, userID string, input AddInput) 
 		return Item{}, fmt.Errorf("check cart product: %w", err)
 	}
 	id := uuid.NewString()
+	// Уникальная пара пользователя и товара позволяет увеличить количество одной SQL-командой.
+	// Предел проверяется до сложения, чтобы параллельные добавления не потеряли обновление
+	// и не переполнили счётчик.
 	result, err := r.db.ExecContext(ctx, `INSERT INTO cart(id,user_id,product_id,count) VALUES(?,?,?,?)
 		ON CONFLICT(user_id,product_id) DO UPDATE SET count=cart.count+excluded.count WHERE cart.count<=?`, id, userID, input.ProductID, input.Count, int64(math.MaxInt64)-input.Count)
 	if err != nil {
@@ -89,6 +92,7 @@ func (r *SQLRepository) List(ctx context.Context, userID string) ([]Item, error)
 
 // Update меняет количество только у позиции, принадлежащей указанному пользователю.
 func (r *SQLRepository) Update(ctx context.Context, userID, cartID string, count int64) (Item, error) {
+	// Владелец входит в условие изменения, чтобы проверка доступа и запись выполнялись вместе.
 	result, err := r.db.ExecContext(ctx, "UPDATE cart SET count=? WHERE id=? AND user_id=?", count, cartID, userID)
 	if err != nil {
 		return Item{}, fmt.Errorf("update cart item: %w", err)

@@ -148,6 +148,7 @@ func TestPhotoUploadGetDelete(t *testing.T) {
 	}
 }
 
+// Неверное содержимое и превышение размера проверяются раздельно: расширение файла не должно заменять проверку байтов, а лимит должен срабатывать до сохранения.
 func TestPhotoRejectsInvalidAndOversizedUploads(t *testing.T) {
 	app := newPhotoTestApp(t)
 	invalid := uploadRequest(t, app, []byte("not an image"), app.productID)

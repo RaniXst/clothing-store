@@ -95,6 +95,8 @@ func (s *Service) Create(ctx context.Context, productID string, data []byte) (Ph
 	if err := s.files.Publish(tempName, item.Filename); err != nil {
 		return Photo{}, err
 	}
+	// Если запись метаданных не сохранилась, удаляем уже опубликованный файл. При остановке
+	// между этими шагами оставшийся файл обнаружит восстановление хранилища.
 	if err := s.repository.Create(ctx, item); err != nil {
 		if removeErr := s.files.Remove(item.Filename); removeErr != nil {
 			slog.Error("failed to remove unreferenced uploaded image", "filename", item.Filename, "error", removeErr)
@@ -187,6 +189,8 @@ func validateImage(data []byte) (string, string, error) {
 	default:
 		return "", "", fmt.Errorf("%w: only JPEG and PNG images are supported", ErrInvalid)
 	}
+	// Проверяем заголовок и число пикселей перед полным декодированием. Сжатый файл может
+	// занимать мало места на диске, но требовать слишком много памяти при распаковке.
 	config, format, err := image.DecodeConfig(bytes.NewReader(data))
 	if err != nil || (format != "jpeg" && format != "png") {
 		return "", "", fmt.Errorf("%w: malformed image", ErrInvalid)

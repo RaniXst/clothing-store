@@ -26,11 +26,15 @@ func Open(ctx context.Context, dbPath string) (*sql.DB, error) {
 		}
 	}
 
+	// Внешние ключи передаются в настройках соединения: SQLite включает их отдельно для каждого
+	// соединения. На них опирается защита истории заказов и каскадное удаление зависимостей.
 	db, err := sql.Open("sqlite", withForeignKeys(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
+	// Один открытый канал к SQLite сериализует операции этого процесса и уменьшает конкуренцию
+	// за блокировку файла. Поэтому код закрывает результаты чтения перед вложенным запросом.
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 	db.SetConnMaxLifetime(0)

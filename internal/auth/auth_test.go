@@ -173,6 +173,7 @@ func TestRegistrationLoginLogoutCSRFAndNoSecretDisclosure(t *testing.T) {
 	}
 }
 
+// Тест объединяет признаки, заметные снаружи: одинаковый отказ при неверных данных, предел попыток и получение актуальной роли по уже выданной сессии.
 func TestLoginGenericFailureRateLimitAndCurrentRole(t *testing.T) {
 	app := newAuthTestApp(t, 10)
 	password := "another correct horse battery"

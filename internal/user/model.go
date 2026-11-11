@@ -67,6 +67,8 @@ type Page struct {
 var roleNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{1,31}$`)
 
 // NormalizeEmail проверяет адрес почты и приводит его к нижнему регистру для поиска без учёта регистра.
+// Единая запись адреса связывает регистрацию и вход: различие регистра в адресе
+// не должно создавать второй аккаунт или мешать поиску существующего.
 func NormalizeEmail(value string) (string, error) {
 	value = strings.TrimSpace(value)
 	parsed, err := mail.ParseAddress(value)

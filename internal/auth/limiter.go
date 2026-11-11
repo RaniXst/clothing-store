@@ -24,6 +24,8 @@ func NewLoginLimiter(maximum int, window time.Duration) *LoginLimiter {
 }
 
 // Allow удаляет старые отметки и сообщает, разрешена ли новая попытка для ключа.
+// Скользящее окно не позволяет получить новую порцию попыток на границе фиксированного интервала.
+// Счётчик в памяти подходит для одного процесса и сбрасывается при перезапуске.
 func (l *LoginLimiter) Allow(key string) bool {
 	now := l.now()
 	l.mu.Lock()
@@ -53,6 +55,8 @@ func (l *LoginLimiter) Allow(key string) bool {
 
 // remoteIP извлекает адрес клиента из HTTP-запроса для ограничения попыток входа.
 func remoteIP(request *http.Request) string {
+	// Порт клиента меняется между подключениями, поэтому ключом служит адрес. Заголовки прокси
+	// не используются: без списка доверенных прокси клиент мог бы подставить в них другой адрес.
 	host, _, err := net.SplitHostPort(request.RemoteAddr)
 	if err == nil {
 		return host

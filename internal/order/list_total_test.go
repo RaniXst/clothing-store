@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// Список и карточка используют разные запросы. Проверяем сумму списка отдельно, чтобы она оставалась верной после изменения цены товара.
 func TestListTotalUsesSnapshotPricesAndCounts(t *testing.T) {
 	f := newOrderFixture(t)
 	f.addCart(productID, 2)

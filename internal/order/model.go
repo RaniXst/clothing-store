@@ -111,6 +111,8 @@ func normalizeID(value string) (string, error) {
 }
 
 // ParseListOptions проверяет фильтры, даты и параметры страницы, включая предел limit=100.
+// Дата окончания воспринимается как день целиком. Исключающая граница следующего дня
+// включает заказы с дробными секундами в конце выбранной даты.
 func ParseListOptions(values url.Values) (ListOptions, error) {
 	o := ListOptions{Limit: DefaultLimit}
 	allowed := map[string]bool{"limit": true, "offset": true, "status": true, "date_from": true, "date_to": true}

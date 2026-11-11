@@ -114,6 +114,8 @@ func (h *Handler) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 // decodeProductInput проверяет тип и размер тела запроса и читает один JSON-объект товара.
+// Ограничение тела и отказ от неизвестных полей ловят ошибку клиента до изменения товара.
+// При PUT принимается полная карточка, чтобы у обновления не было неявных полей.
 func decodeProductInput(w http.ResponseWriter, r *http.Request, input *ProductInput) error {
 	if contentType := r.Header.Get("Content-Type"); !strings.HasPrefix(contentType, "application/json") {
 		return fmt.Errorf("Content-Type must be application/json")

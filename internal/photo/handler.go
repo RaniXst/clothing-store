@@ -40,7 +40,17 @@ func (h *Handler) RegisterReadRoutes(router chi.Router) {
 
 // RegisterWriteRoutes добавляет загрузку и удаление фотографий для защищённой группы.
 func (h *Handler) RegisterWriteRoutes(router chi.Router) {
+	h.RegisterUploadRoute(router)
+	h.RegisterDeleteRoute(router)
+}
+
+// RegisterUploadRoute adds the upload endpoint to the catalog editor group.
+func (h *Handler) RegisterUploadRoute(router chi.Router) {
 	router.Post("/photo", h.create)
+}
+
+// RegisterDeleteRoute adds the standalone photo deletion endpoint.
+func (h *Handler) RegisterDeleteRoute(router chi.Router) {
 	router.Delete("/photo/{id}", h.delete)
 }
 
@@ -50,6 +60,8 @@ func (h *Handler) create(w http.ResponseWriter, r *http.Request) {
 		writePhotoError(w, http.StatusBadRequest, "Content-Type must be multipart/form-data")
 		return
 	}
+	// Ограничиваем весь multipart-запрос до разбора. Небольшой запас учитывает заголовки полей
+	// и границы частей, которые не относятся к размеру самого изображения.
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize+multipartOverhead)
 	if err := r.ParseMultipartForm(1 << 20); err != nil {
 		var tooLarge *http.MaxBytesError

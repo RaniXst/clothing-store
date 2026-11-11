@@ -37,6 +37,8 @@ type Actor struct {
 }
 
 // Validate проверяет количество и UUID товара, возвращая UUID в едином формате.
+// Положительное количество не даёт превратить добавление товара в уменьшение количества
+// корзины. UUID приводится к одной записи перед поиском в базе.
 func (in AddInput) Validate() (string, error) {
 	if in.Count < 1 {
 		return "", fmt.Errorf("%w: count must be positive", ErrInvalid)

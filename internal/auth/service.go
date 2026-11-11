@@ -70,6 +70,8 @@ func NewService(accounts AccountRepository, sessions SessionRepository) (*Servic
 }
 
 // Register всегда назначает публично зарегистрированному пользователю роль client.
+// Публичная регистрация назначает роль клиента, чтобы пользователь не мог выдать себе
+// права сотрудника. Аккаунты сотрудников создаются отдельным защищённым запросом.
 func (s *Service) Register(ctx context.Context, input Registration) (IssuedSession, error) {
 	// Сначала проверяем профиль и вычисляем хеш пароля, затем сохраняем аккаунт и выдаём сессию.
 	if err := user.ValidatePassword(input.Password); err != nil {
@@ -150,6 +152,8 @@ func (s *Service) issue(ctx context.Context, account user.User) (IssuedSession, 
 }
 
 // Authenticate загружает пользователя заново, чтобы авторизация учитывала его текущую роль.
+// Профиль читается по сессии при каждом запросе. Смена роли или удаление аккаунта
+// должны действовать и для браузера, который вошёл до изменения.
 func (s *Service) Authenticate(ctx context.Context, token string) (Principal, error) {
 	if len(token) < 40 || len(token) > 128 {
 		return Principal{}, ErrUnauthenticated

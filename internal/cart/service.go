@@ -64,6 +64,8 @@ func (s *Service) Delete(ctx context.Context, actor Actor, cartID string) error 
 	return s.repository.Delete(ctx, actor.UserID, id)
 }
 // requireClient проверяет, что действие выполняет клиент с корректным UUID.
+// Корзина принадлежит покупателю. Роли сотрудников могут управлять заказами, но не получают
+// прав менять корзину клиента.
 func requireClient(actor Actor) error {
 	if actor.Role != "client" {
 		return ErrDenied

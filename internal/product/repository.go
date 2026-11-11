@@ -54,6 +54,8 @@ func (r *SQLRepository) Update(ctx context.Context, id string, input ProductInpu
 }
 
 // Удаление запрещено, если товар уже входит в историю заказов.
+// Удаление запрещено, если товар входит в историю заказов. Позиции должны сохранять
+// ссылку на купленный товар, даже когда его больше не продают.
 func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 	// Проверка истории заказов и удаление выполняются вместе, чтобы не потерять товар из истории.
 	tx, err := r.db.BeginTx(ctx, nil)
@@ -82,6 +84,8 @@ func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 }
 
 // List строит запрос по точным фильтрам, считает совпадения и возвращает нужную страницу.
+// Значения фильтров передаются отдельно от SQL. Поле сортировки выбирается из известных
+// вариантов, потому что направление ORDER BY нельзя передать как обычное значение.
 func (r *SQLRepository) List(ctx context.Context, options ListOptions) (ProductPage, error) {
 	filters := []struct{ column, value string }{
 		{"type", options.Type}, {"gender", options.Gender}, {"size", options.Size},

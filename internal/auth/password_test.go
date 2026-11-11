@@ -2,6 +2,7 @@ package auth
 
 import "testing"
 
+// Проверяем разные отпечатки одного пароля, чтобы случайная соль не исчезла при изменении формата хранения.
 func TestPasswordHashUsesArgon2idAndUniqueSalt(t *testing.T) {
 	hasher := PasswordHasher{}
 	first, err := hasher.Hash("long test password 1")

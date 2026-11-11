@@ -25,6 +25,8 @@ type PasswordHasher struct{}
 
 // Hash создаёт уникальную случайную соль и возвращает строку с версией Argon2id,
 // настройками защиты, солью и результатом преобразования пароля.
+// Argon2id требует памяти при каждой проверке и повышает стоимость массового подбора.
+// Соль у каждого пароля своя, поэтому одинаковые пароли дают разные хеши.
 func (PasswordHasher) Hash(password string) (string, error) {
 	salt := make([]byte, saltLength)
 	if _, err := rand.Read(salt); err != nil {
@@ -36,6 +38,8 @@ func (PasswordHasher) Hash(password string) (string, error) {
 }
 
 // Verify разбирает сохранённую строку, повторно вычисляет результат и безопасно сравнивает его с паролем.
+// Параметры берутся из сохранённой строки, чтобы старые пароли проверялись даже после смены
+// настроек хеширования. Границы параметров ограничивают расход ресурсов при проверке.
 func (PasswordHasher) Verify(password, encoded string) bool {
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 6 || parts[1] != "argon2id" || parts[2] != "v=19" {

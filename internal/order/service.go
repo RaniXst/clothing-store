@@ -45,6 +45,8 @@ func (s *Service) Get(ctx context.Context, actor Actor, id string) (Order, error
 	if err != nil {
 		return Order{}, err
 	}
+	// Для чужого заказа клиент получает тот же ответ, что и для отсутствующего. Это не выдаёт
+	// сведения о существовании чужой покупки по её идентификатору.
 	if actor.Role == "client" && item.UserID != actor.UserID {
 		return Order{}, ErrNotFound
 	}

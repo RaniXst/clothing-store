@@ -64,6 +64,7 @@ func TestApplyRollsBackEverythingOnFailure(t *testing.T) {
 	}
 }
 
+// Запуск на готовой базе должен обнаруживать изменения старого файла. Иначе две установки могли бы считать одну и ту же версию схемы применённой при разном содержимом.
 func TestApplyRejectsChangedAppliedMigration(t *testing.T) {
 	db := openMemoryDB(t)
 	first := fstest.MapFS{

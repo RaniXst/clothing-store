@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// Нулевой итог допустим. Поле должно присутствовать в JSON, чтобы клиент отличал нулевую цену от отсутствующих данных.
 func TestOrderJSONIncludesZeroTotal(t *testing.T) {
 	encoded, err := json.Marshal(Order{Total: 0})
 	if err != nil {

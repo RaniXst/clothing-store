@@ -25,6 +25,7 @@ import (
 	"github.com/RaniXst/clothing-store/internal/product"
 	"github.com/RaniXst/clothing-store/internal/storage"
 	"github.com/RaniXst/clothing-store/internal/user"
+	"github.com/RaniXst/clothing-store/internal/web"
 	"github.com/RaniXst/clothing-store/migrations"
 )
 
@@ -74,10 +75,12 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	// Привязка к loopback оставляет учебный сайт доступным только на этом компьютере.
+	// Ограничение чтения заголовков не даёт медленному клиенту надолго занять соединение.
 	server := &http.Server{Addr: net.JoinHostPort("127.0.0.1", cfg.AppPort), Handler: router, ReadHeaderTimeout: 5 * time.Second}
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("starting HTTP server", "port", cfg.AppPort)
+		logger.Info("starting HTTP server", "port", cfg.AppPort, "url", "http://"+server.Addr+"/")
 		serverErr <- server.ListenAndServe()
 	}()
 	select {
@@ -112,6 +115,8 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 	if err != nil {
 		return nil, err
 	}
+	// Каталог и фотографии используют один замок: удаление товара и загрузка фото к нему
+	// не должны одновременно менять связанные записи и файлы.
 	mutationMu := &sync.Mutex{}
 	productService := product.NewService(productRepository, photoRepository, fileStore, mutationMu)
 	photoService := photo.NewService(photoRepository, productRepository, fileStore, mutationMu)
@@ -121,6 +126,7 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 
 	router := chi.NewRouter()
 	router.Use(middleware.Logging(logger))
+	web.Register(router, db)
 	productHandler := product.NewHandler(productService)
 	photoHandler := photo.NewHandler(photoService)
 	userHandler := user.NewHandler(userService)
@@ -138,12 +144,20 @@ func buildRouter(ctx context.Context, logger *slog.Logger, db *sql.DB, uploadDir
 		authHandler.RegisterProtectedRoutes(protected)
 		cartHandler.RegisterRoutes(protected)
 		orderHandler.RegisterRoutes(protected)
+		orderapi.RegisterAnalytics(protected, db)
 		protected.Group(func(admin chi.Router) {
 			admin.Use(auth.RequireRoles("admin"))
 			admin.Use(auth.CSRF)
 			userHandler.RegisterAdminRoutes(admin)
-			productHandler.RegisterWriteRoutes(admin)
-			photoHandler.RegisterWriteRoutes(admin)
+			photoHandler.RegisterDeleteRoute(admin)
+		})
+		// Права на каталог проверяет сервер, поскольку запрос можно отправить в обход интерфейса.
+		// Группа отделена от управления пользователями, чтобы менеджер не получил права администратора.
+		protected.Group(func(catalogEditor chi.Router) {
+			catalogEditor.Use(auth.RequireRoles("admin", "manager"))
+			catalogEditor.Use(auth.CSRF)
+			productHandler.RegisterWriteRoutes(catalogEditor)
+			photoHandler.RegisterUploadRoute(catalogEditor)
 		})
 	})
 	router.Get("/health", func(w http.ResponseWriter, r *http.Request) {

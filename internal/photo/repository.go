@@ -67,6 +67,8 @@ func (r *SQLRepository) ListFilenamesForProduct(ctx context.Context, productID s
 }
 
 // ListFilenames возвращает имена файлов, на которые ссылаются записи SQLite.
+// Список ссылок из базы нужен при восстановлении после сбоя: файл без записи можно убрать,
+// а файл, на который ещё ссылается карточка, требуется сохранить.
 func (r *SQLRepository) ListFilenames(ctx context.Context) ([]string, error) {
 	rows, err := r.db.QueryContext(ctx, "SELECT filename FROM photos ORDER BY id")
 	if err != nil {

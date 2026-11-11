@@ -2,6 +2,7 @@ package config
 
 import "testing"
 
+// Значения по умолчанию являются частью сценария локального запуска: распакованный магазин должен работать без отдельного файла настроек.
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("APP_PORT", "8080")
 	t.Setenv("DB_PATH", "./data/clothing-store.db")

@@ -125,6 +125,8 @@ func decode(w http.ResponseWriter, r *http.Request, target any) error {
 }
 
 // writeOrderError переводит ошибки заказов в HTTP-коды, не раскрывая внутренние ошибки базы.
+// Конфликт отделён от неверного запроса: например, статус может быть допустимым сам по себе,
+// но переход к нему уже недоступен из текущего состояния заказа.
 func writeOrderError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, ErrInvalid):

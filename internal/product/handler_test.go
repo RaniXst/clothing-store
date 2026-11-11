@@ -148,6 +148,7 @@ func TestProductListFiltersPaginationAndSort(t *testing.T) {
 	}
 }
 
+// Отказ базы при удалении товара с заказами должен сохранить доступность фото. Тест ловит случай, когда запись уцелела, а файл уже потерян.
 func TestProductValidationAndHistoryDeletionPreservePhoto(t *testing.T) {
 	app := newProductTestApp(t)
 	invalid := productRequest(app, http.MethodPost, "/product", []byte(`{"name":"","price":1}`))

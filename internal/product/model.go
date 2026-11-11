@@ -78,6 +78,8 @@ type ProductPage struct {
 }
 
 // ParseListOptions проверяет фильтры, сортировку и пагинацию — вывод списка частями по limit и offset.
+// Фильтры и сортировка имеют фиксированный набор параметров. Ошибка в имени поля
+// возвращается явно, иначе опечатка могла бы незаметно дать нефильтрованный каталог.
 func ParseListOptions(values url.Values) (ListOptions, error) {
 	options := ListOptions{Limit: DefaultLimit}
 	allowed := map[string]bool{

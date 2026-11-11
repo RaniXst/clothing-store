@@ -66,6 +66,7 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
+// Проверяем права через HTTP-маршруты: ошибка в подключении middleware могла бы открыть запись даже при правильной проверке внутри отдельных сервисов.
 func TestStageThreeRouteAuthorization(t *testing.T) {
 	ctx := context.Background()
 	db, err := database.Open(ctx, filepath.Join(t.TempDir(), "routes.db"))
@@ -134,6 +135,48 @@ func TestStageThreeRouteAuthorization(t *testing.T) {
 	router.ServeHTTP(adminResponse, adminRequest)
 	if adminResponse.Code != http.StatusCreated {
 		t.Fatalf("admin catalog write = %d: %s", adminResponse.Code, adminResponse.Body.String())
+	}
+	const managerEmail = "catalog-manager@example.test"
+	const managerPassword = "manager route test password"
+	if _, err := users.Create(ctx, user.CreateInput{Name: "Manager", Email: managerEmail, Phone: "+100000002", RoleID: user.ManagerRoleID, Password: managerPassword}); err != nil {
+		t.Fatal(err)
+	}
+	managerSession, managerCSRF := login(managerEmail, managerPassword)
+	managerRequest := func(method, path string, body []byte, csrf bool) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(managerSession)
+		req.AddCookie(managerCSRF)
+		if csrf {
+			req.Header.Set("X-CSRF-Token", managerCSRF.Value)
+		}
+		res := httptest.NewRecorder()
+		router.ServeHTTP(res, req)
+		return res
+	}
+	created := managerRequest(http.MethodPost, "/product", guestBody, true)
+	if created.Code != http.StatusCreated {
+		t.Fatalf("manager product create = %d: %s", created.Code, created.Body.String())
+	}
+	location := created.Header().Get("Location")
+	if location == "" {
+		t.Fatal("product location is missing")
+	}
+	updated := managerRequest(http.MethodPut, location, bytes.Replace(guestBody, []byte(`"price":100`), []byte(`"price":200`), 1), true)
+	if updated.Code != http.StatusOK || !strings.Contains(updated.Body.String(), `"price":200`) {
+		t.Fatalf("manager product update = %d: %s", updated.Code, updated.Body.String())
+	}
+	if got := managerRequest(http.MethodDelete, location, nil, false).Code; got != http.StatusForbidden {
+		t.Fatalf("manager product delete without CSRF = %d, want 403", got)
+	}
+	if got := managerRequest(http.MethodDelete, location, nil, true).Code; got != http.StatusNoContent {
+		t.Fatalf("manager product delete = %d, want 204", got)
+	}
+	if got := managerRequest(http.MethodGet, location, nil, false).Code; got != http.StatusNotFound {
+		t.Fatalf("deleted product read = %d, want 404", got)
+	}
+	if got := managerRequest(http.MethodGet, "/user", nil, false).Code; got != http.StatusForbidden {
+		t.Fatalf("manager user list = %d, want 403", got)
 	}
 	photoWrite := httptest.NewRecorder()
 	photoRequest := httptest.NewRequest(http.MethodPost, "/photo", strings.NewReader(""))

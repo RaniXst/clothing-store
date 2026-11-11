@@ -147,6 +147,8 @@ func (h *Handler) deleteRole(w http.ResponseWriter, r *http.Request) {
 }
 
 // decodeJSON проверяет тип и размер тела запроса и разбирает один JSON-объект без неизвестных полей.
+// Форма передаёт только данные соответствующей операции. Неизвестное поле отклоняется,
+// чтобы ошибка в имени параметра не приводила к молчаливому сохранению неполного профиля.
 func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 	if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 		return fmt.Errorf("Content-Type must be application/json")

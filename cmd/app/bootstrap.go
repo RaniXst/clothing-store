@@ -20,6 +20,8 @@ import (
 // bootstrapAdmin создаёт первого администратора только из интерактивного терминала
 // и принимает пароль без отображения на экране.
 func bootstrapAdmin() error {
+	// Терминал позволяет читать пароль без отображения. Аргумент командной строки мог бы
+	// остаться в истории оболочки или быть виден в списке процессов.
 	if !term.IsTerminal(int(os.Stdin.Fd())) {
 		return fmt.Errorf("bootstrap-admin requires an interactive terminal; password is never accepted as an argument")
 	}

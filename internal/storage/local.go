@@ -66,6 +66,8 @@ func (s *Local) Prepare(data []byte) (string, error) {
 }
 
 // Publish переносит подготовленный файл в основную папку под новым безопасным именем.
+// Переименование внутри хранилища публикует уже записанный файл целиком. Читатель
+// не получает промежуточный результат загрузки.
 func (s *Local) Publish(tempName, filename string) error {
 	if !validTempName(tempName) || !validFilename(filename) {
 		return fmt.Errorf("invalid generated file name")
@@ -271,6 +273,8 @@ func (s *Local) tempDir() string  { return filepath.Join(s.root, ".tmp") }
 func (s *Local) trashDir() string { return filepath.Join(s.root, ".trash") }
 
 // validFilename разрешает только UUID-имя файла с расширением JPEG или PNG.
+// Имя проверяется по формату, который выдаёт сервер. Путь из запроса не должен позволять
+// выйти за каталог загрузок или обратиться к произвольному файлу.
 func validFilename(name string) bool {
 	if filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
 		return false

@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// PRAGMA foreign_keys действует на уровне соединения. Проверка нескольких соединений ловит конфигурацию, которая защищала только первое.
 func TestOpenEnablesForeignKeysOnEveryConnection(t *testing.T) {
 	db, err := Open(context.Background(), ":memory:")
 	if err != nil {

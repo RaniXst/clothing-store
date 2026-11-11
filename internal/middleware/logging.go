@@ -14,6 +14,8 @@ func Logging(logger *slog.Logger) func(http.Handler) http.Handler {
 
 			next.ServeHTTP(w, r)
 
+			// Для диагностики достаточно метода, пути и времени ответа. Тело, заголовки и параметры
+			// запроса могут содержать пароли, токены и данные пользователей.
 			logger.Info("http request",
 				"method", r.Method,
 				"path", r.URL.Path,

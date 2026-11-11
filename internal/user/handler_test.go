@@ -198,6 +198,7 @@ func TestUserAndRoleCRUDAndAuthorization(t *testing.T) {
 	}
 }
 
+// Проверяем ограничение через HTTP, потому что для интерфейса важны и сохранность истории, и код конфликта для понятного сообщения.
 func TestUserWithOrderHistoryCannotBeDeleted(t *testing.T) {
 	router, db, adminSession, adminCSRF, service := newUserTestApp(t)
 	created, err := service.Register(context.Background(), "Ordered User", "ordered@example.com", "+100000004", "ordered user long password")

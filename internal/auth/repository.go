@@ -38,6 +38,8 @@ func NewSQLSessionRepository(db *sql.DB) *SQLSessionRepository {
 }
 
 // Create записывает данные сессии, включая хеши токенов и срок действия.
+// При утечке таблицы SHA-256-хеш нельзя отправить как действующую cookie: сервер ждёт
+// исходный случайный токен. Сессия в базе также позволяет отозвать вход при выходе.
 func (r *SQLSessionRepository) Create(ctx context.Context, item Session) error {
 	_, err := r.db.ExecContext(ctx, `INSERT INTO auth_sessions
 		(token_hash, csrf_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,

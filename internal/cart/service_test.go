@@ -39,6 +39,7 @@ func cartFixture(t *testing.T) (*Service, context.Context) {
 	return NewService(NewSQLRepository(db)), ctx
 }
 
+// Одних успешных действий владельца недостаточно: отдельный участник должен получить отказ при обращении к чужой корзине.
 func TestCartOperationsAndOwnerIsolation(t *testing.T) {
 	s, ctx := cartFixture(t)
 	owner := Actor{UserID: testUserID, Role: "client"}

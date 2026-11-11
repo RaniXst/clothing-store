@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Линия — учебный магазин одежды">
+  <title>Линия — магазин одежды</title>
+  <link rel="stylesheet" href="/web/style.css">
+  <script src="/web/store.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell header-content">
+      <a href="/" class="brand"><span class="mark" aria-hidden="true">Л</span> Линия</a>
+      <nav aria-label="Разделы магазина">
+        <button type="button" data-view="catalog" aria-current="page">Каталог</button>
+        <button type="button" data-view="cart" hidden>Корзина</button>
+        <button type="button" data-view="orders" hidden>Заказы</button>
+        <button type="button" data-view="analytics" hidden>Аналитика</button>
+        <button type="button" data-view="managers" hidden>Менеджеры</button>
+        <button type="button" id="account">Войти</button>
+        <button type="button" id="logout" hidden>Выйти</button>
+        <button type="button" id="theme-toggle" role="switch" aria-label="Тёмная тема" aria-checked="false">
+          <span class="theme-thumb" aria-hidden="true">
+            <svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5"/>
+            </svg>
+            <svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round">
+              <path d="M20.5 15.2A8.6 8.6 0 0 1 8.8 3.5a8.7 8.7 0 1 0 11.7 11.7Z"/>
+            </svg>
+          </span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="shell">
+    <noscript><p class="notice error">Для работы магазина включите JavaScript в браузере.</p></noscript>
+    <section class="hero" aria-labelledby="hero-title">
+      <div>
+        <p class="eyebrow">Учебный магазин одежды</p>
+        <h1 id="hero-title">Линия</h1>
+        <p>Каталог одежды, корзина и заказы в одном месте.</p>
+      </div>
+      <svg class="hero-art" viewBox="0 0 230 190" aria-hidden="true">
+        <circle cx="130" cy="93" r="77" fill="#9b87ee"/>
+        <circle cx="188" cy="44" r="24" fill="#f5b66e"/>
+        <path d="M85 54l22-10c6 13 25 13 31 0l22 10 31 27-19 22-16-12v62H89V91l-16 12-19-22z" fill="#f8f3e7" stroke="#221c3b" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M108 117h28" stroke="#7760cf" stroke-width="5" stroke-linecap="round"/>
+      </svg>
+    </section>
+
+    <p class="notice" id="notice" role="status" aria-live="polite" hidden></p>
+
+    <section id="catalog" aria-labelledby="catalog-title">
+      <div class="section-head">
+        <div><p class="eyebrow muted">Витрина</p><h2 id="catalog-title">Каталог</h2></div>
+        <button type="button" class="primary" id="new-product" hidden>Добавить товар</button>
+      </div>
+      <form id="filters" class="filters">
+        <label>Тип<input name="type" placeholder="Например, футболка"></label>
+        <label>Размер<input name="size" placeholder="Например, M"></label>
+        <label>Сортировка<select name="sort"><option value="">По умолчанию</option><option value="price_asc">Сначала дешевле</option><option value="price_desc">Сначала дороже</option></select></label>
+        <button class="secondary">Показать</button>
+        <button type="reset" class="quiet">Сбросить</button>
+      </form>
+      <p class="muted" id="catalog-count"></p>
+      <div class="grid" id="products"></div>
+      <div class="pagination" id="catalog-pages" hidden>
+        <button type="button" class="secondary" id="catalog-prev">Назад</button>
+        <span id="catalog-page"></span>
+        <button type="button" class="secondary" id="catalog-next">Далее</button>
+      </div>
+    </section>
+
+    <section id="cart" aria-labelledby="cart-title" hidden>
+      <div class="section-head"><h2 id="cart-title">Корзина</h2></div>
+      <div id="cart-items"></div>
+      <div id="checkout-box" class="checkout" hidden>
+        <p>Итого <strong id="cart-total"></strong></p>
+        <button type="button" class="primary" id="checkout">Оформить заказ</button>
+      </div>
+    </section>
+
+    <section id="orders" aria-labelledby="orders-title" hidden>
+      <div class="section-head"><h2 id="orders-title">Заказы</h2></div>
+      <div id="order-items"></div>
+      <div class="pagination" id="order-pages" hidden>
+        <button type="button" class="secondary" id="order-prev">Назад</button>
+        <span id="order-page"></span>
+        <button type="button" class="secondary" id="order-next">Далее</button>
+      </div>
+    </section>
+    <section id="analytics" aria-labelledby="analytics-title" hidden>
+      <div class="section-head">
+        <h2 id="analytics-title">Аналитика заказов</h2>
+        <label>Период<select id="analytics-period">
+          <option value="all">Всё время</option>
+          <option value="today">Сегодня</option>
+          <option value="week">Последние 7 дней</option>
+        </select></label>
+      </div>
+      <p id="analytics-loading" class="muted" role="status" hidden>Загружаем данные…</p>
+      <div id="analytics-results" hidden>
+        <dl class="metrics">
+          <div><dt>Всего заказов</dt><dd id="analytics-total"></dd></div>
+          <div><dt>Отменено</dt><dd id="analytics-cancelled"></dd></div>
+          <div><dt>Сумма заказов без отменённых</dt><dd id="analytics-amount"></dd></div>
+        </dl>
+        <button type="button" class="secondary" id="analytics-toggle" aria-controls="analytics-chart" aria-expanded="true">Скрыть диаграмму</button>
+        <div id="analytics-chart" class="analytics-chart">
+          <h3>Заказы по статусам</h3>
+          <p id="analytics-empty" class="muted" hidden>За выбранный период заказов нет.</p>
+          <ul id="analytics-bars" class="analytics-bars"></ul>
+        </div>
+      </div>
+    </section>
+    <section id="managers" aria-labelledby="managers-title" hidden>
+      <div class="section-head">
+        <h2 id="managers-title">Менеджеры</h2>
+        <button type="button" class="primary" id="new-manager">Добавить менеджера</button>
+      </div>
+      <div id="manager-items"></div>
+      <div class="pagination" id="manager-pages" hidden>
+        <button type="button" class="secondary" id="manager-prev">Назад</button>
+        <span id="manager-page"></span>
+        <button type="button" class="secondary" id="manager-next">Далее</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Отдельная форма менеджера не содержит выбора роли. Роль подставляется для этой операции, а право создать сотрудника проверяет сервер. -->
+  <dialog id="manager-dialog" aria-labelledby="manager-title">
+    <div class="dialog-head"><h2 id="manager-title">Новый менеджер</h2><button type="button" class="quiet" data-close aria-label="Закрыть">×</button></div>
+    <p class="notice error" id="manager-error" role="alert" hidden></p>
+    <form id="manager-form" class="form-grid" method="post" action="/user">
+      <label>Имя<input name="name" maxlength="100" required></label>
+      <label>Электронная почта<input name="email" type="email" autocomplete="off" required></label>
+      <label>Телефон<input name="phone" type="tel" maxlength="40" required></label>
+      <label>Пароль<input name="password" type="password" autocomplete="new-password" aria-describedby="manager-password-help" required></label>
+      <p id="manager-password-help" class="muted">Для пароля из латинских символов используйте минимум 12 знаков.</p>
+      <button class="primary">Создать менеджера</button>
+    </form>
+  </dialog>
+
+  <dialog id="auth-dialog" aria-labelledby="auth-title">
+    <div class="dialog-head"><h2 id="auth-title">Вход</h2><button type="button" class="quiet" data-close aria-label="Закрыть">×</button></div>
+    <p class="notice error" id="auth-error" role="alert" hidden></p>
+    <form id="auth-form" class="form-grid" method="post" action="/auth/login">
+      <label id="register-name" hidden>Имя<input name="name" autocomplete="name" maxlength="100" disabled></label>
+      <label id="register-phone" hidden>Телефон<input name="phone" type="tel" autocomplete="tel" maxlength="40" disabled></label>
+      <label>Электронная почта<input name="email" type="email" autocomplete="username" required></label>
+      <label>Пароль<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="primary" id="auth-submit">Войти</button>
+      <button type="button" class="quiet" id="auth-mode">Создать аккаунт</button>
+    </form>
+  </dialog>
+
+  <dialog id="product-dialog" aria-labelledby="product-title">
+    <div class="dialog-head"><h2 id="product-title">Товар</h2><button type="button" class="quiet" data-close aria-label="Закрыть">×</button></div>
+    <p class="notice error" id="product-error" role="alert" hidden></p>
+    <form id="product-form" class="form-grid two" method="post" action="/product">
+      <label class="wide">Название<input name="name" required></label>
+      <label>Тип<select name="type" required>
+        <option value="">Выберите тип</option>
+        <option>футболка</option><option>рубашка</option><option>худи</option>
+        <option>свитер</option><option>куртка</option><option>брюки</option>
+        <option>джинсы</option><option>юбка</option><option>платье</option><option>носки</option>
+      </select></label>
+      <label>Пол<select name="gender" required>
+        <option value="">Выберите вариант</option>
+        <option>мужской</option><option>женский</option><option>унисекс</option>
+      </select></label>
+      <label>Размер<input name="size" list="product-sizes" placeholder="Выберите или введите" required></label>
+      <label>Цвет<input name="color" list="product-colors" placeholder="Выберите или введите" required></label>
+      <label>Бренд<input name="brand" list="product-brands" placeholder="Выберите или введите" required></label>
+      <label>Сезон<select name="season" required>
+        <option value="">Выберите сезон</option>
+        <option>лето</option><option>зима</option><option>демисезон</option><option>всесезон</option>
+      </select></label>
+      <!-- Подсказки ускоряют ввод типовых размеров, при этом магазин принимает размеры из других сеток. -->
+      <datalist id="product-sizes">
+        <option value="XS"><option value="S"><option value="M"><option value="L">
+        <option value="XL"><option value="XXL"><option value="36–39"><option value="40–43">
+      </datalist>
+      <datalist id="product-colors">
+        <option value="белый"><option value="чёрный"><option value="серый"><option value="бежевый">
+        <option value="синий"><option value="красный"><option value="зелёный"><option value="коричневый">
+      </datalist>
+      <datalist id="product-brands"><option value="Линия"></datalist>
+      <label class="wide">Цена, ₽<input name="price" inputmode="decimal" placeholder="1990,00" required></label>
+      <label class="wide">Описание<textarea name="description" rows="3"></textarea></label>
+      <button class="primary wide">Сохранить товар</button>
+    </form>
+    <form id="photo-form" class="photo-form" method="post" action="/photo" enctype="multipart/form-data" hidden>
+      <label>Фото товара (JPEG или PNG, до 5 МиБ)<input name="file" type="file" accept="image/jpeg,image/png" required></label>
+      <button class="secondary">Загрузить фото</button>
+    </form>
+  </dialog>
+
+  <footer class="shell footer">Линия · Учебный проект</footer>
+</body>
+</html>

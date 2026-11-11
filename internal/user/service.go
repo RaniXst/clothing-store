@@ -91,6 +91,8 @@ func (s *Service) newUser(ctx context.Context, name, email, phone, roleID, passw
 }
 
 // ValidatePassword требует пароль длиной от 12 до 1024 байт; в UTF-8 один символ может занимать несколько байт.
+// Нижняя граница отсекает слишком короткие пароли, верхняя ограничивает размер входа.
+// Байты используются одинаково для латиницы и многобайтового текста на сервере.
 func ValidatePassword(password string) error {
 	if len(password) < 12 || len(password) > 1024 {
 		return fmt.Errorf("password must contain 12 to 1024 bytes")

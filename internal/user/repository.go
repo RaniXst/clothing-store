@@ -62,6 +62,8 @@ func (r *SQLRepository) CreateFirstAdmin(ctx context.Context, item User) error {
 	defer func() { _ = tx.Rollback() }()
 	// Пустое обновление получает блокировку записи SQLite до проверки наличия администратора
 	// и предотвращает гонку между двумя одновременными запусками bootstrap.
+	// Холостое обновление получает блокировку записи до проверки числа администраторов.
+	// Два одновременных запуска bootstrap не должны оба увидеть пустую базу.
 	if _, err := tx.ExecContext(ctx, `UPDATE roles SET name=name WHERE id=?`, AdminRoleID); err != nil {
 		return err
 	}
@@ -203,6 +205,8 @@ func (r *SQLRepository) Delete(ctx context.Context, id string) error {
 	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM orders WHERE user_id=?`, id).Scan(&orderCount); err != nil {
 		return err
 	}
+	// История заказов сохраняет ссылку на покупателя. Удаление профиля с заказами
+	// отклоняется, чтобы записи остались связаны с владельцем.
 	if orderCount > 0 {
 		return ErrHasOrders
 	}
